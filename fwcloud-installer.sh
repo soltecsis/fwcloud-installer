@@ -93,7 +93,7 @@ print_copyright
 
 echo
 echo "This shell script will install FWCloud on your system."
-echo "Projects fwcloud-api and fwcloud-ui will be installed from Github."
+echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
 prompt_input "Continue (y/n) [y] ? " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo "Aborting!"
@@ -110,19 +110,18 @@ if [ "$EUID" != "0" ]; then
 fi
 
 
-# Default installation directory.
-# If the directory already exists generate a warning message.
-
-
+# Install required packages.
 echo "Searching for required packages."
 pkg_install "OpenVPN" "openvpn"
 pkg_install "pwgen" "pwgen"
 pkg_install "git" "git"
 pkg_install "build-essential" "build-essential"
 pkg_install "curl" "curl"
+pkg_install "OpenSSL" "openssl"
 curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null 2>&1
 pkg_install "Node.js" "nodejs"
 echo
+
 
 # Select database engine.
 echo "FWCloud needs a MariaDB or MYSQL_CMD database engine."
@@ -163,22 +162,38 @@ if [ ! -d "$REPODIR" ]; then
   exit 1
 fi
 
-cd "$REPODIR"
 echo
-#git clone https://github.com/soltecsis/fwcloud-api.git
+cd "$REPODIR"
+git clone https://github.com/soltecsis/fwcloud-api.git
 if [ "$?" != "0" ]; then
   exit 1
 fi
 
 echo
-#git clone https://github.com/soltecsis/fwcloud-ui.git
+cd "$REPODIR"
+git clone https://github.com/soltecsis/fwcloud-ui.git
 if [ "$?" != "0" ]; then
   exit 1
 fi
+
+echo
+echo "Creating user and group fwcloud and setting up permisions."
+groupadd fwcloud 2>/dev/null
+useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s /bin/bash 2>/dev/null
+chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-api/"
+chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
+
+
+echo
+echo "Installing required Node.js modules."
+cd "$REPODIR/fwcloud-api"
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install"
 
 
 # Create fwcloud database.
 # Fisrt check if we need the database engine root password.
+echo
+echo "Next we are going to create the fwcloud database."
 MYSQL_CMD="`which mysql` -u root"
 OUT=`echo "show databases" | $MYSQL_CMD 2>&1`
 if [ "$?" != 0 ]; then # We have had an error accesing the database server.
@@ -209,7 +224,6 @@ DBHOST="localhost"
 DBNAME="fwcloud"
 DBUSER="fwcdbusr"
 DBPASS=`pwgen 16 1`
-echo "Next we are going to create the fwcloud database."
 echo "The next data will be used for it."
 echo "      Host: $DBHOST"
 echo "  Database: $DBNAME"
@@ -262,12 +276,63 @@ echo
 echo "Generating the .env file for fwcloud-api."
 ENVFILE="${REPODIR}/fwcloud-api/.env"
 cp -pr "${ENVFILE}.example" "${ENVFILE}"
-sed -i "s/SESSION_SECRET=/SESSION_SECRET=`pwgen 64 1 -s`/g" "${ENVFILE}"
-sed -i "s/CRYPT_SECRET=/CRYPT_SECRET=`pwgen 64 1 -s`/g" "${ENVFILE}"
-sed -i "s/TYPEORM_HOST=localhost/TYPEORM_HOST=${DBHOST}/g" "${ENVFILE}"
-sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=${DBNAME}/g" "${ENVFILE}"
-sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=${DBUSER}/g" "${ENVFILE}"
-sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=${DBPASS}/g" "${ENVFILE}"
+sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
+sed -i "s/SESSION_SECRET=/SESSION_SECRET=\"`pwgen 64 1 -s`\"/g" "${ENVFILE}"
+sed -i "s/CRYPT_SECRET=/CRYPT_SECRET=\"`pwgen 64 1 -s`\"/g" "${ENVFILE}"
+sed -i "s/TYPEORM_HOST=localhost/TYPEORM_HOST=\"${DBHOST}\"/g" "${ENVFILE}"
+sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=\"${DBNAME}\"/g" "${ENVFILE}"
+sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
+sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=\"${DBPASS}\"/g" "${ENVFILE}"
+if [ "$REPODIR" != "/opt" ]; then
+  echo >> "${ENVFILE}"
+  echo "WEBSRV_DOCROOT=\"${REPODIR}/fwcloud-ui/dist\"" >> "${ENVFILE}"
+fi
+echo
+
+
+echo "Creating database schema and initial data."
+cd "${REPODIR}/fwcloud-api"
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:run"
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data"
+echo
+
+
+# TLS setup.
+echo "Although it is possible to use communication without encryption, both at the user interface"
+echo "and the API level, it is something that should only be done in a development environment."
+echo "In a production environment it is highly advisable to use encrypted communications" 
+echo "both at the level of access to the user interface and in accessing the API."
+prompt_input "Do you want to use secure communications (y/n) [y] ? " "y n" "y"
+if [ "$OPT" = "y" ]; then
+  mkdir "${REPODIR}/fwcloud-api/config/tls"
+  cd "${REPODIR}/fwcloud-api/config/tls"
+  echo "Generating GPG keys pair for fwcloud-api ... "
+  openssl req -nodes -new -x509  -days 36500 \
+    -keyout fwcloud-api.key \
+    -out fwcloud-api.crt \
+    -subj "/C=ES/ST=Alicante/L=Altea/O=SOLTECSIS - FWCloud.net/OU=I+D+I/CN=`pwgen 32 1 -s`-api.fwcloud.net"
+  echo "Done!"
+  echo "Generating GPG keys pair for fwcloud-ui ... "
+  openssl req -nodes -new -x509  -days 36500 \
+    -keyout fwcloud-web.key \
+    -out fwcloud-web.crt \
+    -subj "/C=ES/ST=Alicante/L=Altea/O=SOLTECSIS - FWCloud.net/OU=I+D+I/CN=`pwgen 32 1 -s`-web.fwcloud.net"
+else
+  echo >> "${ENVFILE}"
+  echo >> "${ENVFILE}"
+  echo "WEBSRV_HTTPS=false" >> "${ENVFILE}"
+  echo "WEBSRV_API_URL=\"http://localhost:3000\"" >> "${ENVFILE}"
+  echo "APISRV_HTTPS=false" >> "${ENVFILE}"
+  echo "SESSION_FORCE_HTTPS=false" >> "${ENVFILE}"
+fi
+echo 
+
+
+echo "Enabling fwcloud-api service."
+cp "${REPODIR}/fwcloud-api/config/sys/fwcloud-api.service" /etc/systemd/system/
+systemctl enable fwcloud-api
+systemctl start fwcloud-api
+echo
 
 exit 0
 
