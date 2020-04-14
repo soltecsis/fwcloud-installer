@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ################################################################
-print_copyright () {
+printCopyright() {
   echo "#################################################################################"
   echo "#                                                                               #"
   echo "#  Copyright 2020 SOLTECSIS SOLUCIONES TECNOLOGICAS, SLU                        #"
@@ -29,7 +29,7 @@ print_copyright () {
 ################################################################
 
 ################################################################
-prompt_input () {
+promptInput() {
   # $1=Text message.
   # $2=Accepted values.
   # $3=Default value.
@@ -58,7 +58,7 @@ prompt_input () {
 ################################################################
 
 ################################################################
-pkg_install () {
+pkgInstall() {
   # $1=Display name.
   # $2=pkg name.
 
@@ -75,7 +75,7 @@ pkg_install () {
 ################################################################
 
 ################################################################
-run_sql () {
+runSql() {
   # $1=SQL.
   
   RESULT=`echo "$1" | $MYSQL_CMD 2>&1`
@@ -87,14 +87,64 @@ run_sql () {
 }
 ################################################################
 
+################################################################
+generateOpensslConfig() {
+  cat > openssl.cnf << EOF
+[ req ]
+distinguished_name = req_distinguished_name
+attributes = req_attributes
+prompt = no
+
+[ req_distinguished_name ]
+O=SOLTECSIS - FWCloud.net
+CN=${1}
+
+[ req_attributes ]
+
+[ cert_ext ]
+subjectKeyIdentifier=hash
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=clientAuth,serverAuth
+EOF
+}
+################################################################
+
+################################################################
+buildTlsCertificate() {
+  echo "Generating GPG keys pair for ${1} ... "
+
+  CN="${1}-`pwgen 32 1 -s`"
+  generateOpensslConfig "$CN"
+
+  # Private key.
+  openssl genrsa -out ${1}.key 2048
+
+  # CSR.
+  openssl req -config ./openssl.cnf -new -key ${1}.key -nodes -out ${1}.csr
+
+  # Certificate.
+  # WARNING: If we indicate more than 825 days for the certificate expiration date
+  # we will not be able to access from Google Chrome web browser.
+  openssl x509 -extfile ./openssl.cnf -extensions cert_ext -req \
+    -days 825 \
+    -signkey ${1}.key -in ${1}.csr -out ${1}.crt
+   
+  rm openssl.cnf
+  rm "${1}.csr"
+
+  chown fwcloud:fwcloud "${1}.key" "${1}.crt"
+  echo "Done!"
+}
+################################################################
+
 
 clear
-print_copyright
+printCopyright
 
 echo
 echo "This shell script will install FWCloud on your system."
 echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
-prompt_input "Continue (y/n) [y] ? " "y n" "y"
+promptInput "Continue (y/n) [y] ? " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo "Aborting!"
   exit 0
@@ -112,14 +162,14 @@ fi
 
 # Install required packages.
 echo "Searching for required packages."
-pkg_install "OpenVPN" "openvpn"
-pkg_install "pwgen" "pwgen"
-pkg_install "git" "git"
-pkg_install "build-essential" "build-essential"
-pkg_install "curl" "curl"
-pkg_install "OpenSSL" "openssl"
+pkgInstall "OpenVPN" "openvpn"
+pkgInstall "pwgen" "pwgen"
+pkgInstall "git" "git"
+pkgInstall "build-essential" "build-essential"
+pkgInstall "curl" "curl"
+pkgInstall "OpenSSL" "openssl"
 curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null 2>&1
-pkg_install "Node.js" "nodejs"
+pkgInstall "Node.js" "nodejs"
 echo
 
 
@@ -137,11 +187,11 @@ else
     echo "Please select the database engine to install:"
     echo "  (1) MariaDB"
     echo "  (2) MySQL"
-    prompt_input "(1/2) [1] ? " "1 2" "1"
+    promptInput "(1/2) [1] ? " "1 2" "1"
     if [ "$OPT" = "1" ]; then
-      pkg_install "MariaDB" "mariadb-server"
+      pkgInstall "MariaDB" "mariadb-server"
     else
-      pkg_install "MySQL" "mysql-server"
+      pkgInstall "MySQL" "mysql-server"
     fi
   fi
 fi
@@ -152,7 +202,7 @@ echo
 REPODIR="/opt"
 echo "Now we are going to clone the fwcloud-api and fwcloud-ui GitHub repositories."
 echo "This repositories will be cloned into the directory: ${REPODIR}"
-prompt_input "Do you want to change to another directory (y/n) [n] ? " "y n" "n"
+promptInput "Do you want to change to another directory (y/n) [n] ? " "y n" "n"
 if [ "$OPT" = "y" ]; then
   read -p "New directory: " REPODIR
 fi
@@ -229,7 +279,7 @@ echo "      Host: $DBHOST"
 echo "  Database: $DBNAME"
 echo "      User: $DBUSER"
 echo "  Password: $DBPASS"
-prompt_input "Do you want to change these data (y/n) [n] ? " "y n" "n"
+promptInput "Do you want to change these data (y/n) [n] ? " "y n" "n"
 if [ "$OPT" = "y" ]; then
   while [ 1 ]; do
     echo
@@ -245,7 +295,7 @@ if [ "$OPT" = "y" ]; then
     echo "  Database: $DBNAME"
     echo "      User: $DBUSER"
     echo "  Password: $DBPASS"
-    prompt_input "Continue (y/n) [y] ? " "y n" "y"
+    promptInput "Continue (y/n) [y] ? " "y n" "y"
     if [ "$OPT" = "y" ]; then
       break
     fi
@@ -257,18 +307,18 @@ OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
 if [ "$OUT" ]; then
   echo "WARNING: Database '$DBNAME' already exists."
   echo "If you continue the existing database will be destroyed."
-  prompt_input "Continue (y/n) [n] ? " "y n" "n"
+  promptInput "Continue (y/n) [n] ? " "y n" "n"
   if [ "$OPT" = "n" ]; then
     echo "Aborting!"
     exit 1
   fi
-  run_sql "drop database $DBNAME"
-  run_sql "drop user '${DBUSER}'@'${DBHOST}'"
+  runSql "drop database $DBNAME"
+  runSql "drop user '${DBUSER}'@'${DBHOST}'"
 fi
-run_sql "create database $DBNAME"
-run_sql "create user '${DBUSER}'@'${DBHOST}' identified by '${DBPASS}'"
-run_sql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
-run_sql "flush privileges"
+runSql "create database $DBNAME"
+runSql "create user '${DBUSER}'@'${DBHOST}' identified by '${DBPASS}'"
+runSql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
+runSql "flush privileges"
 echo
 
 
@@ -297,26 +347,23 @@ su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data"
 echo
 
 
+# CORS.
+echo ""
+
+
 # TLS setup.
 echo "Although it is possible to use communication without encryption, both at the user interface"
 echo "and the API level, it is something that should only be done in a development environment."
 echo "In a production environment it is highly advisable to use encrypted communications" 
 echo "both at the level of access to the user interface and in accessing the API."
-prompt_input "Do you want to use secure communications (y/n) [y] ? " "y n" "y"
+promptInput "Do you want to use secure communications (y/n) [y] ? " "y n" "y"
 if [ "$OPT" = "y" ]; then
   mkdir "${REPODIR}/fwcloud-api/config/tls"
+  chown fwcloud:fwcloud "${REPODIR}/fwcloud-api/config/tls"
   cd "${REPODIR}/fwcloud-api/config/tls"
-  echo "Generating GPG keys pair for fwcloud-api ... "
-  openssl req -nodes -new -x509  -days 36500 \
-    -keyout fwcloud-api.key \
-    -out fwcloud-api.crt \
-    -subj "/C=ES/ST=Alicante/L=Altea/O=SOLTECSIS - FWCloud.net/OU=I+D+I/CN=`pwgen 32 1 -s`-api.fwcloud.net"
-  echo "Done!"
-  echo "Generating GPG keys pair for fwcloud-ui ... "
-  openssl req -nodes -new -x509  -days 36500 \
-    -keyout fwcloud-web.key \
-    -out fwcloud-web.crt \
-    -subj "/C=ES/ST=Alicante/L=Altea/O=SOLTECSIS - FWCloud.net/OU=I+D+I/CN=`pwgen 32 1 -s`-web.fwcloud.net"
+  buildTlsCertificate fwcloud-web
+  echo
+  buildTlsCertificate fwcloud-api
 else
   echo >> "${ENVFILE}"
   echo >> "${ENVFILE}"
