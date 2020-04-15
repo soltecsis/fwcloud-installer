@@ -2,29 +2,30 @@
 
 ################################################################
 printCopyright() {
-  echo "#################################################################################"
-  echo "#                                                                               #"
-  echo "#  Copyright 2020 SOLTECSIS SOLUCIONES TECNOLOGICAS, SLU                        #"
-  echo "#    https://soltecsis.com                                                      #"
-  echo "#    info@soltecsis.com                                                         #"
-  echo "#                                                                               #"
-  echo "#                                                                               #"
-  echo "#  This file is part of FWCloud (https://fwcloud.net).                          #"
-  echo "#                                                                               #"
-  echo "#  FWCloud is free software: you can redistribute it and/or modify              #"
-  echo "#  it under the terms of the GNU Affero General Public License as published by  #"
-  echo "#  the Free Software Foundation, either version 3 of the License, or            #"
-  echo "#  (at your option) any later version.                                          #"
-  echo "#                                                                               #"
-  echo "#  FWCloud is distributed in the hope that it will be useful,                   #"
-  echo "#  but WITHOUT ANY WARRANTY; without even the implied warranty of               #"
-  echo "#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                #"
-  echo "#  GNU General Public License for more details.                                 #"
-  echo "#                                                                               #"
-  echo "#  You should have received a copy of the GNU General Public License            #"
-  echo "#  along with FWCloud.  If not, see <https://www.gnu.org/licenses/>.            #"
-  echo "#                                                                               #"
-  echo "#################################################################################"
+  echo -e "\e[34m#################################################################################"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#  Copyright 2020 SOLTECSIS SOLUCIONES TECNOLOGICAS, SLU                        #"
+  echo -e "\e[34m#    https://soltecsis.com                                                      #"
+  echo -e "\e[34m#    info@soltecsis.com                                                         #"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#  This file is part of FWCloud (https://fwcloud.net).                          #"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#  FWCloud is free software: you can redistribute it and/or modify              #"
+  echo -e "\e[34m#  it under the terms of the GNU Affero General Public License as published by  #"
+  echo -e "\e[34m#  the Free Software Foundation, either version 3 of the License, or            #"
+  echo -e "\e[34m#  (at your option) any later version.                                          #"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#  FWCloud is distributed in the hope that it will be useful,                   #"
+  echo -e "\e[34m#  but WITHOUT ANY WARRANTY; without even the implied warranty of               #"
+  echo -e "\e[34m#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                #"
+  echo -e "\e[34m#  GNU General Public License for more details.                                 #"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#  You should have received a copy of the GNU General Public License            #"
+  echo -e "\e[34m#  along with FWCloud.  If not, see <https://www.gnu.org/licenses/>.            #"
+  echo -e "\e[34m#                                                                               #"
+  echo -e "\e[34m#################################################################################"
+  echo -e "\e[0m"
 }
 ################################################################
 
@@ -65,9 +66,9 @@ pkgInstall() {
   echo -n "${1} ... "
   dpkg -s $2 >/dev/null 2>&1
   if [ "$?" != "0" ]; then
-    echo "NOT FOUND. Installing ..."
-    apt install $2
-    echo
+    echo -n "NOT FOUND. Installing ... "
+    apt install $2 >/dev/null 2>&1
+    echo "DONE."
   else
     echo "FOUND."
   fi
@@ -80,7 +81,7 @@ runSql() {
   
   RESULT=`echo "$1" | $MYSQL_CMD 2>&1`
   if [ "$?" != "0" ]; then
-    echo "ERROR: Executing SQL: $1"
+    echo -e "\e[31mERROR:\e[39m: Executing SQL: $1"
     echo "$RESULT"
     exit 1
   fi
@@ -133,7 +134,7 @@ buildTlsCertificate() {
   rm "${1}.csr"
 
   chown fwcloud:fwcloud "${1}.key" "${1}.crt"
-  echo "Done!"
+  echo "DONE."
 }
 ################################################################
 
@@ -161,20 +162,23 @@ fi
 
 
 # Install required packages.
-echo "Searching for required packages."
+echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "OpenVPN" "openvpn"
 pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
 pkgInstall "build-essential" "build-essential"
 pkgInstall "curl" "curl"
 pkgInstall "OpenSSL" "openssl"
+echo -n "Setting up Node.js repository ... "
 curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null 2>&1
+echo "DONE."
 pkgInstall "Node.js" "nodejs"
 echo
 
 
 # Select database engine.
-echo "FWCloud needs a MariaDB or MYSQL_CMD database engine."
+echo -e "\e[32m\e[1m(*) Database engine.\e[21m\e[0m"
+echo "FWCloud needs a MariaDB or MySQL database engine."
 # Check first if we already have one of the installed.
 dpkg -s mariadb-server >/dev/null 2>&1
 if [ "$?" = "0" ]; then
@@ -200,6 +204,7 @@ echo
 
 # Cloning GitHub repositories.
 REPODIR="/opt"
+echo -e "\e[32m\e[1m(*) Cloning GitHub repositories.\e[21m\e[0m"
 echo "Now we are going to clone the fwcloud-api and fwcloud-ui GitHub repositories."
 echo "This repositories will be cloned into the directory: ${REPODIR}"
 promptInput "Do you want to change to another directory (y/n) [n] ? " "y n" "n"
@@ -208,7 +213,7 @@ if [ "$OPT" = "y" ]; then
 fi
 
 if [ ! -d "$REPODIR" ]; then
-  echo "ERROR: Directory don't exists: ${REPODIR}"
+  echo -e "\e[31mERROR:\e[39m Directory don't exists: ${REPODIR}"
   exit 1
 fi
 
@@ -227,7 +232,8 @@ if [ "$?" != "0" ]; then
 fi
 
 echo
-echo "Creating user and group fwcloud and setting up permisions."
+echo -e "\e[32m\e[1m(*) Setting up permissions.\e[21m\e[0m"
+echo "Creating fwcloud user/group and setting up permissions."
 groupadd fwcloud 2>/dev/null
 useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s /bin/bash 2>/dev/null
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-api/"
@@ -235,7 +241,7 @@ chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
 
 
 echo
-echo "Installing required Node.js modules."
+echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
 cd "$REPODIR/fwcloud-api"
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install"
 
@@ -243,6 +249,7 @@ su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install"
 # Create fwcloud database.
 # Fisrt check if we need the database engine root password.
 echo
+echo -e "\e[32m\e[1m(*) FWCloud database.\e[21m\e[0m"
 echo "Next we are going to create the fwcloud database."
 MYSQL_CMD="`which mysql` -u root"
 OUT=`echo "show databases" | $MYSQL_CMD 2>&1`
@@ -263,7 +270,7 @@ if [ "$?" != 0 ]; then # We have had an error accesing the database server.
     done
     MYSQL_CMD="${MYSQL_CMD} -p\"${DBPASS}\" 2>&1"
   else
-    echo "ERROR: Connecting to database engine."
+    echo -e "\e[31mERROR:\e[39m Connecting to database engine."
     echo "$OUT"
     exit 1
   fi
@@ -275,10 +282,10 @@ DBNAME="fwcloud"
 DBUSER="fwcdbusr"
 DBPASS=`pwgen 16 1`
 echo "The next data will be used for it."
-echo "      Host: $DBHOST"
-echo "  Database: $DBNAME"
-echo "      User: $DBUSER"
-echo "  Password: $DBPASS"
+echo -e "      \e[1mHost:\e[0m $DBHOST"
+echo -e "  \e[1mDatabase:\e[0m $DBNAME"
+echo -e "      \e[1mUser:\e[0m $DBUSER"
+echo -e "  \e[1mPassword:\e[0m $DBPASS"
 promptInput "Do you want to change these data (y/n) [n] ? " "y n" "n"
 if [ "$OPT" = "y" ]; then
   while [ 1 ]; do
@@ -291,10 +298,10 @@ if [ "$OPT" = "y" ]; then
 
     echo
     echo "These are the new database data:"
-    echo "      Host: $DBHOST"
-    echo "  Database: $DBNAME"
-    echo "      User: $DBUSER"
-    echo "  Password: $DBPASS"
+    echo -e "      \e[1mHost:\e[0m $DBHOST"
+    echo -e "  \e[1mDatabase:\e[0m $DBNAME"
+    echo -e "      \e[1mUser:\e[0m $DBUSER"
+    echo -e "  \e[1mPassword:\e[0m $DBPASS"
     promptInput "Continue (y/n) [y] ? " "y n" "y"
     if [ "$OPT" = "y" ]; then
       break
@@ -305,7 +312,7 @@ fi
 # Now check if the fwcloud database already exists.
 OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
 if [ "$OUT" ]; then
-  echo "WARNING: Database '$DBNAME' already exists."
+  echo -e "\e[31mWARNING:\e[39m Database '$DBNAME' already exists."
   echo "If you continue the existing database will be destroyed."
   promptInput "Continue (y/n) [n] ? " "y n" "n"
   if [ "$OPT" = "n" ]; then
@@ -323,7 +330,7 @@ echo
 
 
 # Generate the .env file for fwcloud-api.
-echo "Generating the .env file for fwcloud-api."
+echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
 ENVFILE="${REPODIR}/fwcloud-api/.env"
 cp -pr "${ENVFILE}.example" "${ENVFILE}"
 sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
@@ -337,27 +344,38 @@ if [ "$REPODIR" != "/opt" ]; then
   echo >> "${ENVFILE}"
   echo "WEBSRV_DOCROOT=\"${REPODIR}/fwcloud-ui/dist\"" >> "${ENVFILE}"
 fi
+echo "DONE."
 echo
 
 
-echo "Creating database schema and initial data."
+echo -e "\e[32m\e[1m(*) Creating database schema and initial data.\e[21m\e[0m"
 cd "${REPODIR}/fwcloud-api"
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:run"
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data"
+echo -n "Database schema ... "
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:run" >/dev/null
+if [ "$?" != 0 ]; then
+  echo "Aborting!"
+  exit 1
+fi
+echo "DONE."
+echo -n "Initial data ... "
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data" >/dev/null
+if [ "$?" != 0 ]; then
+  echo "Aborting!"
+  exit 1
+fi
+echo "DONE."
 echo
-
-
-# CORS.
-echo ""
 
 
 # TLS setup.
+echo -e "\e[32m\e[1m(*) Secure communications.\e[21m\e[0m"
 echo "Although it is possible to use communication without encryption, both at the user interface"
 echo "and the API level, it is something that should only be done in a development environment."
 echo "In a production environment it is highly advisable to use encrypted communications" 
 echo "both at the level of access to the user interface and in accessing the API."
 promptInput "Do you want to use secure communications (y/n) [y] ? " "y n" "y"
 if [ "$OPT" = "y" ]; then
+  HTTP_PROTOCOL="https://"
   mkdir "${REPODIR}/fwcloud-api/config/tls"
   chown fwcloud:fwcloud "${REPODIR}/fwcloud-api/config/tls"
   cd "${REPODIR}/fwcloud-api/config/tls"
@@ -365,6 +383,7 @@ if [ "$OPT" = "y" ]; then
   echo
   buildTlsCertificate fwcloud-api
 else
+  HTTP_PROTOCOL="http://"
   echo >> "${ENVFILE}"
   echo >> "${ENVFILE}"
   echo "WEBSRV_HTTPS=false" >> "${ENVFILE}"
@@ -375,11 +394,51 @@ fi
 echo 
 
 
-echo "Enabling fwcloud-api service."
+# CORS.
+echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) withelist setup.\e[21m\e[0m"
+echo "It is important that you include in this list the URL that you will use for accedes fwcloud-ui."
+IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
+CORSWL=""
+for IP in $IPL; do
+  if [ ! -z "$CORSWL" ]; then
+    CORSWL="$CORSWL, "
+  fi
+  CORSWL="${CORSWL}${HTTP_PROTOCOL}${IP}:3030"
+done
+while [ 1 ]; do
+  echo "This is the CORS white list:"
+  echo "$CORSWL"
+
+  promptInput "Do you want to change it (y/n) [n] ? " "y n" "n"
+  if [ "$OPT" = "n" ]; then
+    break
+  fi
+
+  echo "Enter the new CORS white list (coma separated items):"
+  read -e -p "" -i "$CORSWL" CORSWL
+done
+sed -i "s|CORS_WHITELIST=\"http://localhost\"|CORS_WHITELIST=\"${CORSWL}\"|g" "${ENVFILE}"
+echo
+
+
+echo -e "\e[32m\e[1m(*) Enabling and starting fwcloud-api service.\e[21m\e[0m"
 cp "${REPODIR}/fwcloud-api/config/sys/fwcloud-api.service" /etc/systemd/system/
 systemctl enable fwcloud-api
 systemctl start fwcloud-api
+echo "DONE"
 echo
+
+echo -e "\e[32m\e[1m--- PROCESS COMPLETED ----\e[21m\e[0m"
+echo "Your FWCloud system is ready!"
+echo
+echo -e "Access it using one of the CORS white list URLs: \e[1m$CORSWL\e[0m"
+echo
+echo "Using the default login credentials :"
+echo -e "  Customer code: \e[1m1\e[0m"
+echo -e "       Username: \e[1mfwcadmin\e[0m"
+echo -e "       Password: \e[1mfwcadmin\e[0m"
+echo
+echo "If you need help you may contact us using the e-mail: info@fwcloud.net"
 
 exit 0
 
