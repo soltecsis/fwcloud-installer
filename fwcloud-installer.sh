@@ -64,14 +64,15 @@ pkgInstall() {
   # $2=pkg name.
 
   echo -n "${1} ... "
-  dpkg -s $2 >/dev/null 2>&1
-  if [ "$?" != "0" ]; then
-    echo -n "NOT FOUND. Installing ... "
-    apt install $2 >/dev/null 2>&1
+  OUT=`dpkg -s $2 2>/dev/null | grep "^Status: install ok installed"`
+  if [ -z "$OUT" ]; then
+    echo -e "\e[1m\e[33mNOT FOUND. \e[39mInstalling ... \e[0m"
+    apt install $2
     echo "DONE."
   else
     echo "FOUND."
   fi
+  echo
 }
 ################################################################
 
@@ -145,7 +146,7 @@ printCopyright
 echo
 echo "This shell script will install FWCloud on your system."
 echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
-promptInput "Continue (y/n) [y] ? " "y n" "y"
+promptInput "Continue [Y/n] ? " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo "Aborting!"
   exit 0
@@ -163,17 +164,16 @@ fi
 
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
-pkgInstall "OpenVPN" "openvpn"
 pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
 pkgInstall "build-essential" "build-essential"
 pkgInstall "curl" "curl"
 pkgInstall "OpenSSL" "openssl"
+pkgInstall "OpenVPN" "openvpn"
 echo -n "Setting up Node.js repository ... "
 curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null 2>&1
 echo "DONE."
 pkgInstall "Node.js" "nodejs"
-echo
 
 
 # Select database engine.
@@ -189,13 +189,14 @@ else
     echo "MySQL ... FOUND."
   else
     echo "Please select the database engine to install:"
-    echo "  (1) MariaDB"
-    echo "  (2) MySQL"
+    echo "  (1) MySQL"
+    echo "  (2) MariaDB"
     promptInput "(1/2) [1] ? " "1 2" "1"
+    echo
     if [ "$OPT" = "1" ]; then
-      pkgInstall "MariaDB" "mariadb-server"
-    else
       pkgInstall "MySQL" "mysql-server"
+    else
+      pkgInstall "MariaDB" "mariadb-server"
     fi
   fi
 fi
@@ -207,7 +208,7 @@ REPODIR="/opt"
 echo -e "\e[32m\e[1m(*) Cloning GitHub repositories.\e[21m\e[0m"
 echo "Now we are going to clone the fwcloud-api and fwcloud-ui GitHub repositories."
 echo "This repositories will be cloned into the directory: ${REPODIR}"
-promptInput "Do you want to change to another directory (y/n) [n] ? " "y n" "n"
+promptInput "Do you want to change to another directory [y/N] ? " "y n" "n"
 if [ "$OPT" = "y" ]; then
   read -p "New directory: " REPODIR
 fi
@@ -286,7 +287,7 @@ echo -e "      \e[1mHost:\e[0m $DBHOST"
 echo -e "  \e[1mDatabase:\e[0m $DBNAME"
 echo -e "      \e[1mUser:\e[0m $DBUSER"
 echo -e "  \e[1mPassword:\e[0m $DBPASS"
-promptInput "Do you want to change these data (y/n) [n] ? " "y n" "n"
+promptInput "Do you want to change these data [y/N] ? " "y n" "n"
 if [ "$OPT" = "y" ]; then
   while [ 1 ]; do
     echo
@@ -302,7 +303,7 @@ if [ "$OPT" = "y" ]; then
     echo -e "  \e[1mDatabase:\e[0m $DBNAME"
     echo -e "      \e[1mUser:\e[0m $DBUSER"
     echo -e "  \e[1mPassword:\e[0m $DBPASS"
-    promptInput "Continue (y/n) [y] ? " "y n" "y"
+    promptInput "Continue [Y/n] ? " "y n" "y"
     if [ "$OPT" = "y" ]; then
       break
     fi
@@ -314,7 +315,7 @@ OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
 if [ "$OUT" ]; then
   echo -e "\e[31mWARNING:\e[39m Database '$DBNAME' already exists."
   echo "If you continue the existing database will be destroyed."
-  promptInput "Continue (y/n) [n] ? " "y n" "n"
+  promptInput "Continue [y/N] ? " "y n" "n"
   if [ "$OPT" = "n" ]; then
     echo "Aborting!"
     exit 1
@@ -373,7 +374,7 @@ echo "Although it is possible to use communication without encryption, both at t
 echo "and the API level, it is something that should only be done in a development environment."
 echo "In a production environment it is highly advisable to use encrypted communications" 
 echo "both at the level of access to the user interface and in accessing the API."
-promptInput "Do you want to use secure communications (y/n) [y] ? " "y n" "y"
+promptInput "Do you want to use secure communications [Y/n] ? " "y n" "y"
 if [ "$OPT" = "y" ]; then
   HTTP_PROTOCOL="https://"
   mkdir "${REPODIR}/fwcloud-api/config/tls"
@@ -409,7 +410,7 @@ while [ 1 ]; do
   echo "This is the CORS white list:"
   echo "$CORSWL"
 
-  promptInput "Do you want to change it (y/n) [n] ? " "y n" "n"
+  promptInput "Do you want to change it [y/N] ? " "y n" "n"
   if [ "$OPT" = "n" ]; then
     break
   fi
@@ -423,8 +424,19 @@ echo
 
 echo -e "\e[32m\e[1m(*) Enabling and starting fwcloud-api service.\e[21m\e[0m"
 cp "${REPODIR}/fwcloud-api/config/sys/fwcloud-api.service" /etc/systemd/system/
+echo -n "Enabling at boot ... "
 systemctl enable fwcloud-api
+echo "DONE"
+echo -n "Compiling and starting (please wait) "
 systemctl start fwcloud-api
+while [ 1 ]; do
+  sleep 1
+  echo -n "."
+  OUT=`netstat -tan | grep " 0\.0\.0\.0\:3030 "`
+  if [ "$OUT" ]; then
+    break
+  fi
+done
 echo "DONE"
 echo
 
