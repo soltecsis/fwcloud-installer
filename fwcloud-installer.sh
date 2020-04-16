@@ -437,7 +437,7 @@ while [ 1 ]; do
     break
   fi
 done
-echo "DONE"
+echo " DONE"
 echo
 
 echo -e "\e[32m\e[1m--- PROCESS COMPLETED ----\e[21m\e[0m"
