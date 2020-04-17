@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Default variables values.
+FWCLOUD_API_PORT="3131"
+FWCLOUD_WEB_PORT="3030"
+REPODIR="/opt"
+
 ################################################################
 printCopyright() {
   echo -e "\e[34m#################################################################################"
@@ -63,7 +68,7 @@ pkgInstall() {
   # $1=Display name.
   # $2=pkg name.
 
-  echo -n "${1} ... "
+  echo -n -e "\e[96mPACKAGE: \e[39m${1} ... "
   OUT=`dpkg -s $2 2>/dev/null | grep "^Status: install ok installed"`
   if [ -z "$OUT" ]; then
     echo -e "\e[1m\e[33mNOT FOUND. \e[39mInstalling ... \e[0m"
@@ -148,8 +153,8 @@ echo "This shell script will install FWCloud on your system."
 echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
 promptInput "Continue [Y/n] ? " "y n" "y"
 if [ "$OPT" = "n" ]; then
-  echo "Aborting!"
-  exit 0
+  echo -e "\e[31Installation canceled!\e[39m"
+  exit 1
 fi
 echo
 
@@ -157,13 +162,14 @@ echo
 # Check if we are the root user or a user with sudo privileges.
 # If not, error.
 if [ "$EUID" != "0" ]; then
-  echo "Please run as root or using the sudo command."
-  exit 0
+  echo -e "\e[31mERROR:\e[39m Please run this script as root or using the sudo command."
+  exit 1
 fi
 
 
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
+pkgInstall "lsof" "lsof"
 pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
 pkgInstall "build-essential" "build-essential"
@@ -203,8 +209,31 @@ fi
 echo
 
 
+# Check if TPC ports used for fwcloud-api are in use.
+echo -e "\e[32m\e[1m(*) Cheking FWCloud TCP ports.\e[21m\e[0m"
+echo -n "TCP port ${FWCLOUD_API_PORT} for fwcloud-api ... "
+OUT=`lsof -nP -iTCP -sTCP:LISTEN | grep "\:${FWCLOUD_API_PORT}"`
+if [ "$OUT" ]; then
+  echo -e "\e[31mIN USE!\e[39m"
+  lsof -nP -iTCP -sTCP:LISTEN | head -n 1
+  echo "$OUT"
+  exit 1
+fi
+echo "OK."
+
+echo -n "TCP port ${FWCLOUD_WEB_PORT} for fwcloud-ui ... "
+OUT=`lsof -nP -iTCP -sTCP:LISTEN | grep "\:${FWCLOUD_WEB_PORT}"`
+if [ "$OUT" ]; then
+  echo -e "\e[31mIN USE!\e[39m"
+  lsof -nP -iTCP -sTCP:LISTEN | head -n 1
+  echo "$OUT"
+  exit 1
+fi
+echo "OK."
+echo
+
+
 # Cloning GitHub repositories.
-REPODIR="/opt"
 echo -e "\e[32m\e[1m(*) Cloning GitHub repositories.\e[21m\e[0m"
 echo "Now we are going to clone the fwcloud-api and fwcloud-ui GitHub repositories."
 echo "This repositories will be cloned into the directory: ${REPODIR}"
@@ -317,7 +346,7 @@ if [ "$OUT" ]; then
   echo "If you continue the existing database will be destroyed."
   promptInput "Continue [y/N] ? " "y n" "n"
   if [ "$OPT" = "n" ]; then
-    echo "Aborting!"
+    echo -e "\e[31Installation canceled!\e[39m"
     exit 1
   fi
   runSql "drop database $DBNAME"
@@ -354,14 +383,14 @@ cd "${REPODIR}/fwcloud-api"
 echo -n "Database schema ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:run" >/dev/null
 if [ "$?" != 0 ]; then
-  echo "Aborting!"
+  echo -e "\e[31Installation canceled!\e[39m"
   exit 1
 fi
 echo "DONE."
 echo -n "Initial data ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data" >/dev/null
 if [ "$?" != 0 ]; then
-  echo "Aborting!"
+  echo -e "\e[31Installation canceled!\e[39m"
   exit 1
 fi
 echo "DONE."
@@ -397,7 +426,7 @@ echo
 
 # CORS.
 echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) withelist setup.\e[21m\e[0m"
-echo "It is important that you include in this list the URL that you will use for accedes fwcloud-ui."
+echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
 IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
 CORSWL=""
 for IP in $IPL; do
@@ -424,15 +453,16 @@ echo
 
 echo -e "\e[32m\e[1m(*) Enabling and starting fwcloud-api service.\e[21m\e[0m"
 cp "${REPODIR}/fwcloud-api/config/sys/fwcloud-api.service" /etc/systemd/system/
+sed -i "s|/opt/|${REPODIR}/|g" "/etc/systemd/system/fwcloud-api.service"
 echo -n "Enabling at boot ... "
-systemctl enable fwcloud-api
+systemctl enable fwcloud-api >/dev/null 2>&1
 echo "DONE"
 echo -n "Compiling and starting (please wait) "
 systemctl start fwcloud-api
 while [ 1 ]; do
   sleep 1
   echo -n "."
-  OUT=`netstat -tan | grep " 0\.0\.0\.0\:3030 "`
+  OUT=`netstat -tan | grep " 0\.0\.0\.0\:${FWCLOUD_WEB_PORT} "`
   if [ "$OUT" ]; then
     break
   fi
