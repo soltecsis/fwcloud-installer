@@ -151,7 +151,7 @@ printCopyright
 echo
 echo "This shell script will install FWCloud on your system."
 echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
-promptInput "Continue [Y/n] ? " "y n" "y"
+promptInput "Do you want to continue? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo -e "\e[31Installation canceled!\e[39m"
   exit 1
@@ -197,7 +197,7 @@ else
     echo "Please select the database engine to install:"
     echo "  (1) MySQL"
     echo "  (2) MariaDB"
-    promptInput "(1/2) [1] ? " "1 2" "1"
+    promptInput "(1/2)? [1] " "1 2" "1"
     echo
     if [ "$OPT" = "1" ]; then
       pkgInstall "MySQL" "mysql-server"
@@ -236,9 +236,9 @@ echo
 # Cloning GitHub repositories.
 echo -e "\e[32m\e[1m(*) Cloning GitHub repositories.\e[21m\e[0m"
 echo "Now we are going to clone the fwcloud-api and fwcloud-ui GitHub repositories."
-echo "This repositories will be cloned into the directory: ${REPODIR}"
-promptInput "Do you want to change to another directory [y/N] ? " "y n" "n"
-if [ "$OPT" = "y" ]; then
+echo "These repositories will be cloned into the directory: ${REPODIR}"
+promptInput "Is it right? [Y/n] " "y n" "y"
+if [ "$OPT" = "n" ]; then
   read -p "New directory: " REPODIR
 fi
 
@@ -316,8 +316,8 @@ echo -e "      \e[1mHost:\e[0m $DBHOST"
 echo -e "  \e[1mDatabase:\e[0m $DBNAME"
 echo -e "      \e[1mUser:\e[0m $DBUSER"
 echo -e "  \e[1mPassword:\e[0m $DBPASS"
-promptInput "Do you want to change these data [y/N] ? " "y n" "n"
-if [ "$OPT" = "y" ]; then
+promptInput "Is it right? [Y/n] " "y n" "y"
+if [ "$OPT" = "n" ]; then
   while [ 1 ]; do
     echo
     echo "Enter new database data:"
@@ -327,12 +327,12 @@ if [ "$OPT" = "y" ]; then
     read -p "  Password: " DBPASS
 
     echo
-    echo "These are the new database data:"
+    echo "These are the new database access data:"
     echo -e "      \e[1mHost:\e[0m $DBHOST"
     echo -e "  \e[1mDatabase:\e[0m $DBNAME"
     echo -e "      \e[1mUser:\e[0m $DBUSER"
     echo -e "  \e[1mPassword:\e[0m $DBPASS"
-    promptInput "Continue [Y/n] ? " "y n" "y"
+    promptInput "Is it right? [Y/n] " "y n" "y"
     if [ "$OPT" = "y" ]; then
       break
     fi
@@ -344,7 +344,7 @@ OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
 if [ "$OUT" ]; then
   echo -e "\e[31mWARNING:\e[39m Database '$DBNAME' already exists."
   echo "If you continue the existing database will be destroyed."
-  promptInput "Continue [y/N] ? " "y n" "n"
+  promptInput "Do you want to continue? [Y/n] " "y n" "n"
   if [ "$OPT" = "n" ]; then
     echo -e "\e[31Installation canceled!\e[39m"
     exit 1
@@ -352,7 +352,7 @@ if [ "$OUT" ]; then
   runSql "drop database $DBNAME"
   runSql "drop user '${DBUSER}'@'${DBHOST}'"
 fi
-runSql "create database $DBNAME"
+runSql "create database $DBNAME CHARACTER SET utf8 COLLATE utf8_general_ci"
 runSql "create user '${DBUSER}'@'${DBHOST}' identified by '${DBPASS}'"
 runSql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
 runSql "flush privileges"
@@ -403,7 +403,7 @@ echo "Although it is possible to use communication without encryption, both at t
 echo "and the API level, it is something that should only be done in a development environment."
 echo "In a production environment it is highly advisable to use encrypted communications" 
 echo "both at the level of access to the user interface and in accessing the API."
-promptInput "Do you want to use secure communications [Y/n] ? " "y n" "y"
+promptInput "Do you want to use secure communications? [Y/n] " "y n" "y"
 if [ "$OPT" = "y" ]; then
   HTTP_PROTOCOL="https://"
   mkdir "${REPODIR}/fwcloud-api/config/tls"
@@ -425,7 +425,7 @@ echo
 
 
 # CORS.
-echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) withelist setup.\e[21m\e[0m"
+echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) whitelist setup.\e[21m\e[0m"
 echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
 IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
 CORSWL=""
@@ -436,11 +436,10 @@ for IP in $IPL; do
   CORSWL="${CORSWL}${HTTP_PROTOCOL}${IP}:3030"
 done
 while [ 1 ]; do
-  echo "This is the CORS white list:"
-  echo "$CORSWL"
+  echo -e "CORS white list: \e[1m${CORSWL}\e[0m"
 
-  promptInput "Do you want to change it [y/N] ? " "y n" "n"
-  if [ "$OPT" = "n" ]; then
+  promptInput "Is it right? [Y/n] " "y n" "y"
+  if [ "$OPT" = "y" ]; then
     break
   fi
 
@@ -475,7 +474,7 @@ echo "Your FWCloud system is ready!"
 echo
 echo -e "Access it using one of the CORS white list URLs: \e[1m$CORSWL\e[0m"
 echo
-echo "Using the default login credentials :"
+echo "Using the default login credentials:"
 echo -e "  Customer code: \e[1m1\e[0m"
 echo -e "       Username: \e[1mfwcadmin\e[0m"
 echo -e "       Password: \e[1mfwcadmin\e[0m"
@@ -483,4 +482,3 @@ echo
 echo "If you need help you may contact us using the e-mail: info@fwcloud.net"
 
 exit 0
-
