@@ -344,7 +344,7 @@ OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
 if [ "$OUT" ]; then
   echo -e "\e[31mWARNING:\e[39m Database '$DBNAME' already exists."
   echo "If you continue the existing database will be destroyed."
-  promptInput "Do you want to continue? [Y/n] " "y n" "n"
+  promptInput "Do you want to continue? [y/N] " "y n" "n"
   if [ "$OPT" = "n" ]; then
     echo -e "\e[31Installation canceled!\e[39m"
     exit 1
