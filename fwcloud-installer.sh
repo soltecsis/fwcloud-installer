@@ -153,7 +153,7 @@ echo "This shell script will install FWCloud on your system."
 echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
 promptInput "Do you want to continue? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
-  echo -e "\e[31Installation canceled!\e[39m"
+  echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
 fi
 echo
@@ -190,7 +190,7 @@ dpkg -s mariadb-server >/dev/null 2>&1
 if [ "$?" = "0" ]; then
   echo "MariaDB ... FOUND."
 else
-  dpkg -s mysql-server >/dev/null 2>&1
+  dpkg -s default-mysql-server >/dev/null 2>&1
   if [ "$?" = "0" ]; then
     echo "MySQL ... FOUND."
   else
@@ -200,7 +200,7 @@ else
     promptInput "(1/2)? [1] " "1 2" "1"
     echo
     if [ "$OPT" = "1" ]; then
-      pkgInstall "MySQL" "mysql-server"
+      pkgInstall "MySQL" "default-mysql-server"
     else
       pkgInstall "MariaDB" "mariadb-server"
     fi
@@ -276,6 +276,17 @@ cd "$REPODIR/fwcloud-api"
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install"
 
 
+echo
+echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
+echo -n "Compiling ... "
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run build" >/dev/null
+if [ "$?" != 0 ]; then
+  echo -e "\e[31mInstallation canceled!\e[39m"
+  exit 1
+fi
+echo "DONE."
+
+
 # Create fwcloud database.
 # Fisrt check if we need the database engine root password.
 echo
@@ -346,7 +357,7 @@ if [ "$OUT" ]; then
   echo "If you continue the existing database will be destroyed."
   promptInput "Do you want to continue? [y/N] " "y n" "n"
   if [ "$OPT" = "n" ]; then
-    echo -e "\e[31Installation canceled!\e[39m"
+    echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
   runSql "drop database $DBNAME"
@@ -383,14 +394,14 @@ cd "${REPODIR}/fwcloud-api"
 echo -n "Database schema ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:run" >/dev/null
 if [ "$?" != 0 ]; then
-  echo -e "\e[31Installation canceled!\e[39m"
+  echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
 fi
 echo "DONE."
 echo -n "Initial data ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data" >/dev/null
 if [ "$?" != 0 ]; then
-  echo -e "\e[31Installation canceled!\e[39m"
+  echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
 fi
 echo "DONE."
@@ -456,7 +467,7 @@ sed -i "s|/opt/|${REPODIR}/|g" "/etc/systemd/system/fwcloud-api.service"
 echo -n "Enabling at boot ... "
 systemctl enable fwcloud-api >/dev/null 2>&1
 echo "DONE"
-echo -n "Compiling and starting (please wait) "
+echo -n "Starting "
 systemctl start fwcloud-api
 while [ 1 ]; do
   sleep 1
