@@ -309,9 +309,6 @@ BRANCH="develop"
 echo "Selecting branch for the fwcloud-api project ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; git checkout $BRANCH"
 echo "DONE."
-echo "Selecting branch for the fwcloud-ui project ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-ui\"; git checkout $BRANCH"
-echo "DONE."
 echo
 
 
