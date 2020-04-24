@@ -533,8 +533,8 @@ echo -e "       Username: \e[96mfwcadmin\e[0m"
 echo -e "       Password: \e[96mfwcadmin\e[0m"
 echo
 echo "If you need help please contac us:"
-echo -e "\e[96minfo@fwcloud.net\e[0m"
-echo -e "\e[96mhttps://fwcloud.net\e[0m"
+echo -e "\e[93minfo@fwcloud.net\e[0m"
+echo -e "\e[93mhttps://fwcloud.net\e[0m"
 echo -e "\e[32m\e[1m--------------------------\e[21m\e[0m"
 echo
 exit 0
