@@ -304,11 +304,12 @@ echo -e "\e[32m\e[1m(*) Branch select.\e[21m\e[0m"
 #else
 #  BRANCH="develop"
 #fi
+echo "At this moment only the develop branch is available."
 BRANCH="develop"
-echo "fwcloud-api project ... "
+echo "Selecting branch fwcloud-api project ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; git checkout $BRANCH"
 echo "DONE."
-echo "fwcloud-ui project ... "
+echo "Selecting branch for fwcloud-ui project ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-ui\"; git checkout $BRANCH"
 echo "DONE."
 echo
@@ -527,13 +528,16 @@ echo
 echo -e "\e[32m\e[1m--- PROCESS COMPLETED ----\e[21m\e[0m"
 echo "Your FWCloud system is ready!"
 echo
-echo -e "Access it using one of the CORS white list URLs: \e[1m$CORSWL\e[0m"
+echo -e "Access it using one of the CORS white list URLs: \e[96m$CORSWL\e[0m"
 echo
 echo "Using the default login credentials:"
-echo -e "  Customer code: \e[1m1\e[0m"
-echo -e "       Username: \e[1mfwcadmin\e[0m"
-echo -e "       Password: \e[1mfwcadmin\e[0m"
+echo -e "  Customer code: \e[96m1\e[0m"
+echo -e "       Username: \e[96mfwcadmin\e[0m"
+echo -e "       Password: \e[96mfwcadmin\e[0m"
 echo
-echo "If you need help you may contact us using the e-mail: info@fwcloud.net"
-
+echo "If you need help please contac us:"
+echo -e "\e[96minfo@fwcloud.net\e[0m"
+echo -e "\e[96mhttps://fwcloud.net\e[0m"
+echo -e "\e[32m\e[1m--------------------------\e[21m\e[0m"
+echo
 exit 0
