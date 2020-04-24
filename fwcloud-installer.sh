@@ -175,7 +175,7 @@ case $DIST in
     ;;
   *)
     echo "Your Linux distribution (${DIST}) is not supported."
-    promptInput "Do you want to continue? [Y/n] " "y n" "y"
+    promptInput "Do you want to continue? [y/N] " "y n" "n"
     if [ "$OPT" = "n" ]; then
       echo -e "\e[31mInstallation canceled!\e[39m"
       exit 1
