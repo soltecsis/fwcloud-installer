@@ -306,10 +306,10 @@ echo -e "\e[32m\e[1m(*) Branch select.\e[21m\e[0m"
 #fi
 echo "At this moment only the develop branch is available."
 BRANCH="develop"
-echo "Selecting branch fwcloud-api project ... "
+echo "Selecting branch for the fwcloud-api project ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; git checkout $BRANCH"
 echo "DONE."
-echo "Selecting branch for fwcloud-ui project ... "
+echo "Selecting branch for the fwcloud-ui project ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-ui\"; git checkout $BRANCH"
 echo "DONE."
 echo
