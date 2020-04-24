@@ -205,11 +205,18 @@ pkgInstall "Node.js" "nodejs"
 echo -e "\e[32m\e[1m(*) Database engine.\e[21m\e[0m"
 echo "FWCloud needs a MariaDB or MySQL database engine."
 # Check first if we already have one of the installed.
-dpkg -s mariadb-server >/dev/null 2>&1
+if [ "$DIST" = "Debian" ]; then
+  MARIADB_PKG="mariadb-server"
+  MYSQL_PKG="default-mysql-server"
+else
+  MARIADB_PKG="mariadb-server"
+  MYSQL_PKG="mysql-server"
+fi
+dpkg -s $MARIADB_PKG >/dev/null 2>&1
 if [ "$?" = "0" ]; then
   echo "MariaDB ... FOUND."
 else
-  dpkg -s default-mysql-server >/dev/null 2>&1
+  dpkg -s $MYSQL_PKG >/dev/null 2>&1
   if [ "$?" = "0" ]; then
     echo "MySQL ... FOUND."
   else
@@ -219,9 +226,9 @@ else
     promptInput "(1/2)? [1] " "1 2" "1"
     echo
     if [ "$OPT" = "1" ]; then
-      pkgInstall "MySQL" "default-mysql-server"
+      pkgInstall "MySQL" "$MYSQL_PKG"
     else
-      pkgInstall "MariaDB" "mariadb-server"
+      pkgInstall "MariaDB" "$MARIADB_PKG"
     fi
   fi
 fi
@@ -287,6 +294,24 @@ groupadd fwcloud 2>/dev/null
 useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s /bin/bash 2>/dev/null
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-api/"
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
+
+
+echo
+echo -e "\e[32m\e[1m(*) Branch select.\e[21m\e[0m"
+#promptInput "Select git branch (master/develop) ? [M/d] " "m d" "m"
+#if [ "$OPT" = "m" ]; then
+#  BRANCH="master"
+#else
+#  BRANCH="develop"
+#fi
+BRANCH="develop"
+echo "fwcloud-api project ... "
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; git checkout $BRANCH"
+echo "DONE."
+echo "fwcloud-ui project ... "
+su - fwcloud -c "cd \"$REPODIR/fwcloud-ui\"; git checkout $BRANCH"
+echo "DONE."
+echo
 
 
 echo
