@@ -167,6 +167,24 @@ if [ "$EUID" != "0" ]; then
 fi
 
 
+echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
+DIST=`cat /etc/issue | head -n 1 | awk '{print $1}'`
+case $DIST in
+  Ubuntu|Debian) 
+    echo "Ok, you are running ${DIST}, a supported Linux distribution."
+    ;;
+  *)
+    echo "Your Linux distribution (${DIST}) is not supported."
+    promptInput "Do you want to continue? [Y/n] " "y n" "y"
+    if [ "$OPT" = "n" ]; then
+      echo -e "\e[31mInstallation canceled!\e[39m"
+      exit 1
+    fi
+    ;;
+esac
+echo 
+
+
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
@@ -174,6 +192,7 @@ pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
 pkgInstall "build-essential" "build-essential"
 pkgInstall "curl" "curl"
+pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
 pkgInstall "OpenVPN" "openvpn"
 echo -n "Setting up Node.js repository ... "
