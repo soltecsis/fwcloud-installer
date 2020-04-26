@@ -72,7 +72,7 @@ pkgInstall() {
   OUT=`dpkg -s $2 2>/dev/null | grep "^Status: install ok installed"`
   if [ -z "$OUT" ]; then
     echo -e "\e[1m\e[33mNOT FOUND. \e[39mInstalling ... \e[0m"
-    apt install $2
+    apt install -y $2
     echo "DONE."
   else
     echo "FOUND."
@@ -190,7 +190,7 @@ echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
 pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
-pkgInstall "build-essential" "build-essential"
+#pkgInstall "build-essential" "build-essential"
 pkgInstall "curl" "curl"
 pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
