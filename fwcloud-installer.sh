@@ -527,12 +527,12 @@ echo "Your FWCloud system is ready!"
 echo
 echo -e "Access it using one of the CORS white list URLs: \e[96m$CORSWL\e[0m"
 echo
-echo "Using the default login credentials:"
+echo "These are default login credentials:"
 echo -e "  Customer code: \e[96m1\e[0m"
 echo -e "       Username: \e[96mfwcadmin\e[0m"
 echo -e "       Password: \e[96mfwcadmin\e[0m"
 echo
-echo "If you need help please contac us:"
+echo "If you need help please contact us:"
 echo -e "\e[93minfo@fwcloud.net\e[0m"
 echo -e "\e[93mhttps://fwcloud.net\e[0m"
 echo -e "\e[32m\e[1m--------------------------\e[21m\e[0m"
