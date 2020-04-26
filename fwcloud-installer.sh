@@ -476,7 +476,7 @@ else
   echo >> "${ENVFILE}"
   echo >> "${ENVFILE}"
   echo "WEBSRV_HTTPS=false" >> "${ENVFILE}"
-  echo "WEBSRV_API_URL=\"http://localhost:3000\"" >> "${ENVFILE}"
+  echo "WEBSRV_API_URL=\"http://localhost:3131\"" >> "${ENVFILE}"
   echo "APISRV_HTTPS=false" >> "${ENVFILE}"
   echo "SESSION_FORCE_HTTPS=false" >> "${ENVFILE}"
 fi
