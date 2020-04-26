@@ -196,8 +196,10 @@ pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
 pkgInstall "OpenVPN" "openvpn"
 echo -n "Setting up Node.js repository ... "
-curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null
+OUT=`curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -  2>&1 >/dev/null`
 if [ "$?" != "0" ]; then
+  echo
+  echo "$OUT"
   echo -e "\e[31mERROR!\e[39m"
   exit 1
 fi
@@ -531,7 +533,7 @@ echo "Your FWCloud system is ready!"
 echo
 echo -e "Access it using one of the CORS white list URLs: \e[96m$CORSWL\e[0m"
 echo
-echo "These are default login credentials:"
+echo "These are the default login credentials:"
 echo -e "  Customer code: \e[96m1\e[0m"
 echo -e "       Username: \e[96mfwcadmin\e[0m"
 echo -e "       Password: \e[96mfwcadmin\e[0m"
