@@ -190,13 +190,17 @@ echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
 pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
-pkgInstall "build-essential" "build-essential"
+#pkgInstall "build-essential" "build-essential"
 pkgInstall "curl" "curl"
 pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
 pkgInstall "OpenVPN" "openvpn"
 echo -n "Setting up Node.js repository ... "
-curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null 2>&1
+curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - >/dev/null
+if [ "$?" != "0" ]; then
+  echo -e "\e[31mERROR!\e[39m"
+  exit 1
+fi
 echo "DONE."
 pkgInstall "Node.js" "nodejs"
 
