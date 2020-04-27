@@ -284,8 +284,10 @@ else
     echo
     if [ "$OPT" = "1" ]; then
       pkgInstall "MySQL" "$MYSQL_PKG"
+      systemctl start mysqld
     else
       pkgInstall "MariaDB" "$MARIADB_PKG"
+      systemctl start mariadb
     fi
   fi
 fi
