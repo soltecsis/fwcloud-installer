@@ -35,6 +35,39 @@ printCopyright() {
 ################################################################
 
 ################################################################
+passGen() {
+  PASSGEN=`cat /dev/urandom | tr -dc a-zA-Z0-9 | fold -w ${1} | head -n 1`
+}
+################################################################
+
+################################################################
+setUbuntuVars() {
+  PKGM_CMD="apt install -y"
+  NODE_SRC="https://deb.nodesource.com/setup_12.x"
+  MARIADB_PKG="mariadb-server"
+  MYSQL_PKG="mysql-server"
+}
+################################################################
+
+################################################################
+setDebianVars() {
+  PKGM_CMD="apt install -y"
+  NODE_SRC="https://deb.nodesource.com/setup_12.x"
+  MARIADB_PKG="mariadb-server"
+  MYSQL_PKG="default-mysql-server"
+}
+################################################################
+
+################################################################
+setRedHatVars() {
+  PKGM_CMD="yum install -y"
+  NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+  MARIADB_PKG="mariadb-server"
+  MYSQL_PKG="mysql-server"
+}
+################################################################
+
+################################################################
 promptInput() {
   # $1=Text message.
   # $2=Accepted values.
@@ -64,15 +97,37 @@ promptInput() {
 ################################################################
 
 ################################################################
+pkgSearch() {
+  # $1=pkg name.
+
+  FOUND=""
+  if [ $DIST = "Debian" -o $DIST = "Ubuntu" ]; then
+    FOUND=`dpkg -s $1 2>/dev/null | grep "^Status: install ok installed"`
+  elif [ $DIST = "RedHat" ]; then
+    rpm -q $1 >/dev/null 2>&1
+    if [ "$?" = 0 ]; then
+      FOUND="1"
+    fi
+  fi
+
+  if [ "$FOUND" ]; then
+    return 1
+  else
+    return 0
+  fi
+}
+################################################################
+
+################################################################
 pkgInstall() {
   # $1=Display name.
   # $2=pkg name.
 
   echo -n -e "\e[96mPACKAGE: \e[39m${1} ... "
-  OUT=`dpkg -s $2 2>/dev/null | grep "^Status: install ok installed"`
-  if [ -z "$OUT" ]; then
+  pkgSearch "$2"
+  if [ "$?" = "0" ]; then
     echo -e "\e[1m\e[33mNOT FOUND. \e[39mInstalling ... \e[0m"
-    apt install -y $2
+    $PKGM_CMD $2
     echo "DONE."
   else
     echo "FOUND."
@@ -120,7 +175,8 @@ EOF
 buildTlsCertificate() {
   echo "Generating GPG keys pair for ${1} ... "
 
-  CN="${1}-`pwgen 32 1 -s`"
+  passGen 32
+  CN="${1}-${PASSGEN}"
   generateOpensslConfig "$CN"
 
   # Private key.
@@ -168,35 +224,37 @@ fi
 
 
 echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
-DIST=`cat /etc/issue | head -n 1 | awk '{print $1}'`
-case $DIST in
-  Ubuntu|Debian) 
-    echo "Ok, you are running ${DIST}, a supported Linux distribution."
-    ;;
-  *)
-    echo "Your Linux distribution (${DIST}) is not supported."
-    promptInput "Do you want to continue? [y/N] " "y n" "n"
-    if [ "$OPT" = "n" ]; then
-      echo -e "\e[31mInstallation canceled!\e[39m"
-      exit 1
-    fi
-    ;;
+#DIST=`cat /etc/issue | head -n 1 | awk '{print $1}'`
+OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
+case $OS in
+  'Ubuntu '*) DIST="Ubuntu"; setUbuntuVars;;
+  'Debian '*) DIST="Debian"; setDebianVars;;
+  'Red Hat Enterprise '*) DIST="RedHat"; setRedHatVars;;
+  *) DIST="";;
 esac
+
+if [ $DIST ]; then
+  echo "Ok, you are running ${OS}, a supported Linux distribution."
+else
+  echo "Your Linux distribution (${OS}) is not supported."
+  promptInput "Do you want to continue? [y/N] " "y n" "n"
+  if [ "$OPT" = "n" ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+fi
 echo 
 
 
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
-pkgInstall "pwgen" "pwgen"
 pkgInstall "git" "git"
-#pkgInstall "build-essential" "build-essential"
 pkgInstall "curl" "curl"
 pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
-pkgInstall "OpenVPN" "openvpn"
 echo -n "Setting up Node.js repository ... "
-OUT=`curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -  2>&1 >/dev/null`
+OUT=`curl -sL ${NODE_SRC} | sudo -E bash -  2>&1 >/dev/null`
 if [ "$?" != "0" ]; then
   echo
   echo "$OUT"
@@ -211,19 +269,12 @@ pkgInstall "Node.js" "nodejs"
 echo -e "\e[32m\e[1m(*) Database engine.\e[21m\e[0m"
 echo "FWCloud needs a MariaDB or MySQL database engine."
 # Check first if we already have one of the installed.
-if [ "$DIST" = "Debian" ]; then
-  MARIADB_PKG="mariadb-server"
-  MYSQL_PKG="default-mysql-server"
-else
-  MARIADB_PKG="mariadb-server"
-  MYSQL_PKG="mysql-server"
-fi
-dpkg -s $MARIADB_PKG >/dev/null 2>&1
-if [ "$?" = "0" ]; then
+pkgSearch "$MARIADB_PKG"
+if [ "$?" = "1" ]; then
   echo "MariaDB ... FOUND."
 else
-  dpkg -s $MYSQL_PKG >/dev/null 2>&1
-  if [ "$?" = "0" ]; then
+  pkgSearch "$MYSQL_PKG"
+  if [ "$?" = "1" ]; then
     echo "MySQL ... FOUND."
   else
     echo "Please select the database engine to install:"
@@ -315,7 +366,6 @@ BRANCH="develop"
 echo "Selecting branch for the fwcloud-api project ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; git checkout $BRANCH"
 echo "DONE."
-echo
 
 
 echo
@@ -326,7 +376,7 @@ su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install"
 
 echo
 echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
-echo -n "Compiling ... "
+echo -n "Compiling (please wait) ... "
 su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run build" >/dev/null
 if [ "$?" != 0 ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
@@ -369,7 +419,8 @@ fi
 DBHOST="localhost"
 DBNAME="fwcloud"
 DBUSER="fwcdbusr"
-DBPASS=`pwgen 16 1`
+passGen 16
+DBPASS="$PASSGEN"
 echo "The next data will be used for it."
 echo -e "      \e[1mHost:\e[0m $DBHOST"
 echo -e "  \e[1mDatabase:\e[0m $DBNAME"
@@ -423,8 +474,10 @@ echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
 ENVFILE="${REPODIR}/fwcloud-api/.env"
 cp -pr "${ENVFILE}.example" "${ENVFILE}"
 sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
-sed -i "s/SESSION_SECRET=/SESSION_SECRET=\"`pwgen 64 1 -s`\"/g" "${ENVFILE}"
-sed -i "s/CRYPT_SECRET=/CRYPT_SECRET=\"`pwgen 64 1 -s`\"/g" "${ENVFILE}"
+passGen 64
+sed -i "s/SESSION_SECRET=/SESSION_SECRET=\"$PASSGEN\"/g" "${ENVFILE}"
+passGen 64
+sed -i "s/CRYPT_SECRET=/CRYPT_SECRET=\"$PASSGEN\"/g" "${ENVFILE}"
 sed -i "s/TYPEORM_HOST=localhost/TYPEORM_HOST=\"${DBHOST}\"/g" "${ENVFILE}"
 sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=\"${DBNAME}\"/g" "${ENVFILE}"
 sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
