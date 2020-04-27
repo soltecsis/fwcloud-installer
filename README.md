@@ -1,4 +1,4 @@
-# fwcloud-installer
-Script for fwcloud installation.
+# FWCloud-Installer
+Script to install FWCloud in a simple way.
 
-With this script you will install a fwcloud system easilly and in only a few minutes.
+This script allows you to install a complete FWCloud system (including FWCloud-API and FWCloud-UI) in a matter of a few minutes.
