@@ -284,10 +284,14 @@ else
     echo
     if [ "$OPT" = "1" ]; then
       pkgInstall "MySQL" "$MYSQL_PKG"
-      systemctl start mysqld
+      if [ "$DIST" = "RedHat "]; then
+        systemctl start mysqld
+      fi
     else
       pkgInstall "MariaDB" "$MARIADB_PKG"
-      systemctl start mariadb
+      if [ "$DIST" = "RedHat "]; then
+        systemctl start mariadb
+      fi
     fi
   fi
 fi
