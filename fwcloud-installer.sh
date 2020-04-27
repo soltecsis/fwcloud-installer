@@ -97,7 +97,7 @@ promptInput() {
 ################################################################
 
 ################################################################
-pkgSearch() {
+pkgInstalled() {
   # $1=pkg name.
 
   FOUND=""
@@ -124,7 +124,7 @@ pkgInstall() {
   # $2=pkg name.
 
   echo -n -e "\e[96mPACKAGE: \e[39m${1} ... "
-  pkgSearch "$2"
+  pkgInstalled "$2"
   if [ "$?" = "0" ]; then
     echo -e "\e[1m\e[33mNOT FOUND. \e[39mInstalling ... \e[0m"
     $PKGM_CMD $2
@@ -200,6 +200,18 @@ buildTlsCertificate() {
 }
 ################################################################
 
+################################################################
+startEnableService() {
+  echo -n "Starting $1 service ... "
+  systemctl start "$1"
+  echo "DONE"
+
+  echo -n "Enabling $1 service at boot ... "
+  systemctl enable "$1" >/dev/null 2>&1
+  echo "DONE"
+}
+################################################################
+
 
 clear
 printCopyright
@@ -234,9 +246,9 @@ case $OS in
 esac
 
 if [ $DIST ]; then
-  echo "Ok, you are running ${OS}, a supported Linux distribution."
+  echo -e "Detected supported Linux distribution: \e[35m${OS}\e[39m"
 else
-  echo "Your Linux distribution (${OS}) is not supported."
+  echo -e "Your Linux distribution (\e[35m${OS}\e[39m) is not supported."
   promptInput "Do you want to continue? [y/N] " "y n" "n"
   if [ "$OPT" = "n" ]; then
     echo -e "\e[31mInstallation canceled!\e[39m"
@@ -269,11 +281,11 @@ pkgInstall "Node.js" "nodejs"
 echo -e "\e[32m\e[1m(*) Database engine.\e[21m\e[0m"
 echo "FWCloud needs a MariaDB or MySQL database engine."
 # Check first if we already have one of the installed.
-pkgSearch "$MARIADB_PKG"
+pkgInstalled "$MARIADB_PKG"
 if [ "$?" = "1" ]; then
   echo "MariaDB ... FOUND."
 else
-  pkgSearch "$MYSQL_PKG"
+  pkgInstalled "$MYSQL_PKG"
   if [ "$?" = "1" ]; then
     echo "MySQL ... FOUND."
   else
@@ -285,12 +297,12 @@ else
     if [ "$OPT" = "1" ]; then
       pkgInstall "MySQL" "$MYSQL_PKG"
       if [ "$DIST" = "RedHat" ]; then
-        systemctl start mysqld
+        startEnableService "mysqld"
       fi
     else
       pkgInstall "MariaDB" "$MARIADB_PKG"
       if [ "$DIST" = "RedHat" ]; then
-        systemctl start mariadb
+        startEnableService "mariadb"
       fi
     fi
   fi
@@ -597,6 +609,14 @@ echo -e "  Customer code: \e[96m1\e[0m"
 echo -e "       Username: \e[96mfwcadmin\e[0m"
 echo -e "       Password: \e[96mfwcadmin\e[0m"
 echo
+
+pkgInstalled "$MYSQL_PKG"
+if [ "$?" = "1" ]; then
+  echo -e "\e[31mWARNING:\e[0m Package firewalld is installed."
+  echo "Disable firewalld service or enable access to TCP port 3030."
+  echo
+fi
+
 echo "If you need help please contact us:"
 echo -e "\e[93minfo@fwcloud.net\e[0m"
 echo -e "\e[93mhttps://fwcloud.net\e[0m"
