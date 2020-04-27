@@ -610,7 +610,7 @@ echo -e "       Username: \e[96mfwcadmin\e[0m"
 echo -e "       Password: \e[96mfwcadmin\e[0m"
 echo
 
-pkgInstalled "$MYSQL_PKG"
+pkgInstalled "firewalld"
 if [ "$?" = "1" ]; then
   echo -e "\e[31mWARNING:\e[0m Package firewalld is installed."
   echo "Disable firewalld service or enable access to TCP port 3030."
