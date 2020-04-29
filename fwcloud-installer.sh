@@ -279,7 +279,7 @@ pkgInstall "Node.js" "nodejs"
 
 # Select database engine.
 echo -e "\e[32m\e[1m(*) Database engine.\e[21m\e[0m"
-echo "FWCloud needs a MariaDB or MySQL database engine."
+echo "FWCloud needs a MySQL or MariaDB database engine."
 # Check first if we already have one of the installed.
 pkgInstalled "$MARIADB_PKG"
 if [ "$?" = "1" ]; then
