@@ -283,10 +283,12 @@ echo "FWCloud needs a MariaDB or MySQL database engine."
 # Check first if we already have one of the installed.
 pkgInstalled "$MARIADB_PKG"
 if [ "$?" = "1" ]; then
+  DBENGINE="MariaDB"
   echo "MariaDB ... FOUND."
 else
   pkgInstalled "$MYSQL_PKG"
   if [ "$?" = "1" ]; then
+    DBENGINE="MySQL"
     echo "MySQL ... FOUND."
   else
     echo "Please select the database engine to install:"
@@ -295,17 +297,30 @@ else
     promptInput "(1/2)? [1] " "1 2" "1"
     echo
     if [ "$OPT" = "1" ]; then
+      DBENGINE="MySQL"
       pkgInstall "MySQL" "$MYSQL_PKG"
       if [ "$DIST" = "RedHat" ]; then
         startEnableService "mysqld"
       fi
     else
+      DBENGINE="MariaDB"
       pkgInstall "MariaDB" "$MARIADB_PKG"
       if [ "$DIST" = "RedHat" ]; then
         startEnableService "mariadb"
       fi
     fi
   fi
+fi
+
+# Support for MySQL 8.
+if [ "$DBENGINE" = "MySQL" ]; then
+  # Get MySQL major version number.
+  MYSQL_VERSION_MAJOR_NUMBER=`echo "show variables like 'version'" | mysql -N -u root | awk '{print $2}' | awk -F"." '{print $1}'`
+  if [ $MYSQL_VERSION_MAJOR_NUMBER -ge 8 ]; then
+    IDENTIFIED_BY="identified with mysql_native_password by"
+  else
+    IDENTIFIED_BY="identified by"
+  fi 
 fi
 echo
 
@@ -481,7 +496,7 @@ if [ "$OUT" ]; then
   runSql "drop user '${DBUSER}'@'${DBHOST}'"
 fi
 runSql "create database $DBNAME CHARACTER SET utf8 COLLATE utf8_general_ci"
-runSql "create user '${DBUSER}'@'${DBHOST}' identified by '${DBPASS}'"
+runSql "create user '${DBUSER}'@'${DBHOST}' ${IDENTIFIED_BY} '${DBPASS}'"
 runSql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
 runSql "flush privileges"
 echo
