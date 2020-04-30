@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Default variables values.
-FWCLOUD_API_PORT="3131"
-FWCLOUD_WEB_PORT="3030"
-REPODIR="/opt"
-
 ################################################################
 printCopyright() {
   echo -e "\e[34m#################################################################################"
@@ -41,29 +36,35 @@ passGen() {
 ################################################################
 
 ################################################################
-setUbuntuVars() {
+setGlobalVars() {
+  FWCLOUD_API_PORT="3131"
+  FWCLOUD_WEB_PORT="3030"
+  REPODIR="/opt"
+
   PKGM_CMD="apt install -y"
   NODE_SRC="https://deb.nodesource.com/setup_12.x"
-  MARIADB_PKG="mariadb-server"
   MYSQL_PKG="mysql-server"
-}
-################################################################
-
-################################################################
-setDebianVars() {
-  PKGM_CMD="apt install -y"
-  NODE_SRC="https://deb.nodesource.com/setup_12.x"
   MARIADB_PKG="mariadb-server"
-  MYSQL_PKG="default-mysql-server"
-}
-################################################################
 
-################################################################
-setRedHatVars() {
-  PKGM_CMD="yum install -y"
-  NODE_SRC="https://rpm.nodesource.com/setup_12.x"
-  MARIADB_PKG="mariadb-server"
-  MYSQL_PKG="mysql-server"
+  case $DIST in
+    'Ubuntu') 
+      ;;
+
+    'Debian') 
+      MYSQL_PKG="default-mysql-server"
+      ;;
+
+    'RedHat'|'CentOS') 
+      PKGM_CMD="yum install -y"
+      NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+      ;;
+
+    'Fedora') 
+      PKGM_CMD="yum install -y"
+      NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+      MYSQL_PKG="community-mysql-server"
+      ;;
+  esac
 }
 ################################################################
 
@@ -103,7 +104,7 @@ pkgInstalled() {
   FOUND=""
   if [ $DIST = "Debian" -o $DIST = "Ubuntu" ]; then
     FOUND=`dpkg -s $1 2>/dev/null | grep "^Status: install ok installed"`
-  elif [ $DIST = "RedHat" ]; then
+  elif [ $DIST = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
     rpm -q $1 >/dev/null 2>&1
     if [ "$?" = 0 ]; then
       FOUND="1"
@@ -239,11 +240,14 @@ echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
 #DIST=`cat /etc/issue | head -n 1 | awk '{print $1}'`
 OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
 case $OS in
-  'Ubuntu '*) DIST="Ubuntu"; setUbuntuVars;;
-  'Debian '*) DIST="Debian"; setDebianVars;;
-  'Red Hat Enterprise '*) DIST="RedHat"; setRedHatVars;;
+  'Ubuntu '*) DIST="Ubuntu";;
+  'Debian '*) DIST="Debian";;
+  'Red Hat Enterprise '*) DIST="RedHat";;
+  'CentOS '*) DIST="CentOS";;
+  'Fedora '*) DIST="Fedora";;
   *) DIST="";;
 esac
+setGlobalVars
 
 if [ $DIST ]; then
   echo -e "Detected supported Linux distribution: \e[35m${OS}\e[39m"
@@ -265,6 +269,10 @@ pkgInstall "git" "git"
 pkgInstall "curl" "curl"
 pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
+if [ $DIST = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
+  pkgInstall "make" "make"
+  pkgInstall "gcc-c++" "gcc-c++"
+fi
 echo -n "Setting up Node.js repository ... "
 OUT=`curl -sL ${NODE_SRC} | sudo -E bash -  2>&1 >/dev/null`
 if [ "$?" != "0" ]; then
@@ -299,13 +307,13 @@ else
     if [ "$OPT" = "1" ]; then
       DBENGINE="MySQL"
       pkgInstall "MySQL" "$MYSQL_PKG"
-      if [ "$DIST" = "RedHat" ]; then
+      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
         startEnableService "mysqld"
       fi
     else
       DBENGINE="MariaDB"
       pkgInstall "MariaDB" "$MARIADB_PKG"
-      if [ "$DIST" = "RedHat" ]; then
+      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
         startEnableService "mariadb"
       fi
     fi
@@ -393,8 +401,11 @@ echo "DONE."
 echo
 echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
 cd "$REPODIR/fwcloud-api"
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install"
-
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install --loglevel=error"
+if [ "$?" != 0 ]; then
+  echo -e "\e[31mInstallation canceled!\e[39m"
+  exit 1
+fi
 
 echo
 echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
