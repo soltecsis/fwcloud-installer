@@ -140,9 +140,10 @@ pkgInstall() {
 ################################################################
 runSql() {
   # $1=SQL.
+  # $2=Ignore error.
   
   RESULT=`echo "$1" | $MYSQL_CMD 2>&1`
-  if [ "$?" != "0" ]; then
+  if [ "$?" != "0" -a -z "$2" ]; then
     echo -e "\e[31mERROR:\e[39m: Executing SQL: $1"
     echo "$RESULT"
     exit 1
@@ -449,13 +450,12 @@ if [ "$?" != 0 ]; then # We have had an error accesing the database server.
 fi
 
 # Support for MySQL 8.
+IDENTIFIED_BY="identified by"
 if [ "$DBENGINE" = "MySQL" ]; then
   # Get MySQL major version number.
   MYSQL_VERSION_MAJOR_NUMBER=`echo "show variables like 'version'" | ${MYSQL_CMD} -N | awk '{print $2}' | awk -F"." '{print $1}'`
   if [ $MYSQL_VERSION_MAJOR_NUMBER -ge 8 ]; then
     IDENTIFIED_BY="identified with mysql_native_password by"
-  else
-    IDENTIFIED_BY="identified by"
   fi 
 fi
 
@@ -504,7 +504,7 @@ if [ "$OUT" ]; then
     exit 1
   fi
   runSql "drop database $DBNAME"
-  runSql "drop user '${DBUSER}'@'${DBHOST}'"
+  runSql "drop user '${DBUSER}'@'${DBHOST}'" "I"
 fi
 runSql "create database $DBNAME CHARACTER SET utf8 COLLATE utf8_general_ci"
 runSql "create user '${DBUSER}'@'${DBHOST}' ${IDENTIFIED_BY} '${DBPASS}'"
