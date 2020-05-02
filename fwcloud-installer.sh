@@ -270,10 +270,6 @@ pkgInstall "git" "git"
 pkgInstall "curl" "curl"
 pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
-if [ $DIST = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
-  pkgInstall "make" "make"
-  pkgInstall "gcc-c++" "gcc-c++"
-fi
 echo -n "Setting up Node.js repository ... "
 OUT=`curl -sL ${NODE_SRC} | sudo -E bash -  2>&1 >/dev/null`
 if [ "$?" != "0" ]; then
