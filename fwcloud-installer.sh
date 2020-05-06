@@ -64,6 +64,13 @@ setGlobalVars() {
       NODE_SRC="https://rpm.nodesource.com/setup_12.x"
       MYSQL_PKG="community-mysql-server"
       ;;
+
+    'OpenSUSE') 
+      PKGM_CMD="zypper install -y"
+      NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+      MYSQL_PKG="mysql-server"
+      MARIADB_PKG="mariadb"
+      ;;
   esac
 }
 ################################################################
@@ -106,6 +113,11 @@ pkgInstalled() {
     FOUND=`dpkg -s $1 2>/dev/null | grep "^Status: install ok installed"`
   elif [ $DIST = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
     rpm -q $1 >/dev/null 2>&1
+    if [ "$?" = 0 ]; then
+      FOUND="1"
+    fi
+  elif [ $DIST = "OpenSUSE" ]; then
+    zypper search -i $1 >/dev/null 2>&1
     if [ "$?" = 0 ]; then
       FOUND="1"
     fi
@@ -246,6 +258,7 @@ case $OS in
   'Red Hat Enterprise '*) DIST="RedHat";;
   'CentOS '*) DIST="CentOS";;
   'Fedora '*) DIST="Fedora";;
+  'openSUSE '*) DIST="OpenSUSE";;
   *) DIST="";;
 esac
 setGlobalVars
@@ -268,17 +281,18 @@ echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
 pkgInstall "git" "git"
 pkgInstall "curl" "curl"
-pkgInstall "net-tools" "net-tools"
 pkgInstall "OpenSSL" "openssl"
-echo -n "Setting up Node.js repository ... "
-OUT=`curl -sL ${NODE_SRC} | sudo -E bash -  2>&1 >/dev/null`
-if [ "$?" != "0" ]; then
-  echo
-  echo "$OUT"
-  echo -e "\e[31mERROR!\e[39m"
-  exit 1
+if [ "$DIST" != "OpenSUSE" ]; then
+  echo -n "Setting up Node.js repository ... "
+  OUT=`curl -sL ${NODE_SRC} | sudo -E bash -  2>&1 >/dev/null`
+  if [ "$?" != "0" ]; then
+    echo
+    echo "$OUT"
+    echo -e "\e[31mERROR!\e[39m"
+    exit 1
+  fi
+  echo "DONE."
 fi
-echo "DONE."
 pkgInstall "Node.js" "nodejs"
 
 
@@ -296,21 +310,26 @@ else
     DBENGINE="MySQL"
     echo "MySQL ... FOUND."
   else
-    echo "Please select the database engine to install:"
-    echo "  (1) MySQL"
-    echo "  (2) MariaDB"
-    promptInput "(1/2)? [1] " "1 2" "1"
-    echo
+    # OpenSUSE only supports MariaDB.
+    if [ "$DIST" = "OpenSUSE" ]; then
+      OPT=2
+    else 
+      echo "Please select the database engine to install:"
+      echo "  (1) MySQL"
+      echo "  (2) MariaDB"
+      promptInput "(1/2)? [1] " "1 2" "1"
+      echo
+    fi
     if [ "$OPT" = "1" ]; then
       DBENGINE="MySQL"
       pkgInstall "MySQL" "$MYSQL_PKG"
-      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
+      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
         startEnableService "mysqld"
       fi
     else
       DBENGINE="MariaDB"
       pkgInstall "MariaDB" "$MARIADB_PKG"
-      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" ]; then
+      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
         startEnableService "mariadb"
       fi
     fi
@@ -613,7 +632,7 @@ systemctl start fwcloud-api
 while [ 1 ]; do
   sleep 1
   echo -n "."
-  OUT=`netstat -tan | grep " 0\.0\.0\.0\:${FWCLOUD_WEB_PORT} "`
+  OUT=`lsof -nP -iTCP -sTCP:LISTEN | grep "\:${FWCLOUD_WEB_PORT}"`
   if [ "$OUT" ]; then
     break
   fi
@@ -635,7 +654,7 @@ echo
 pkgInstalled "firewalld"
 if [ "$?" = "1" ]; then
   echo -e "\e[31mWARNING:\e[0m Package firewalld is installed."
-  echo "Disable firewalld service or enable access to TCP port 3030."
+  echo "You will have to allow access to TCP port 3030 in your firewalld policy."
   echo
 fi
 
