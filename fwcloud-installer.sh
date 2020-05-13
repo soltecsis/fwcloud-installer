@@ -67,9 +67,18 @@ setGlobalVars() {
 
     'OpenSUSE') 
       PKGM_CMD="zypper install -y"
-      NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+      NODE_SRC=""
       MYSQL_PKG="mysql-server"
       MARIADB_PKG="mariadb"
+      ;;
+
+    'FreeBSD') 
+      PKGM_CMD="pkg install -y"
+      NODE_SRC=""
+      VER=`pkg search mysql | grep -i "(server)" | awk -F"-" '{print $1}' | awk -F"mysql" '{print $2}' | sort -n -r | head -n 1`
+      MYSQL_PKG="mysql${VER}-server"
+      VER=`pkg search mariadb | grep -i "(server)" | awk -F"-" '{print $1}' | awk -F"mariadb" '{print $2}' | sort -n -r | head -n 1`
+      MARIADB_PKG="mariadb${VER}-server"
       ;;
   esac
 }
@@ -81,7 +90,12 @@ promptInput() {
   # $2=Accepted values.
   # $3=Default value.
 
-  read -s -n1 -p "$1" OPT
+
+  if [ "$DIST" = "FreeBSD" ]; then
+    read -p "$1" OPT
+  else
+    read -s -n1 -p "$1" OPT
+  fi
 
   while [ 1 ]; do
     # If the user has pressed the enter key then return the default value.
@@ -118,6 +132,11 @@ pkgInstalled() {
     fi
   elif [ $DIST = "OpenSUSE" ]; then
     zypper search -i $1 >/dev/null 2>&1
+    if [ "$?" = 0 ]; then
+      FOUND="1"
+    fi
+  elif [ $DIST = "FreeBSD" ]; then
+    pkg info $1 >/dev/null 2>&1
     if [ "$?" = 0 ]; then
       FOUND="1"
     fi
@@ -230,6 +249,39 @@ startEnableService() {
 clear
 printCopyright
 
+
+echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
+which hostnamectl >/dev/null 2>&1
+if [ "$?" = "0" ]; then
+  OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
+else
+  OS=`uname -a`
+fi
+case $OS in
+  'Ubuntu '*) DIST="Ubuntu";;
+  'Debian '*) DIST="Debian";;
+  'Red Hat Enterprise '*) DIST="RedHat";;
+  'CentOS '*) DIST="CentOS";;
+  'Fedora '*) DIST="Fedora";;
+  'openSUSE '*) DIST="OpenSUSE";;
+  'FreeBSD '*) DIST="FreeBSD";;
+  *) DIST="";;
+esac
+setGlobalVars
+
+if [ $DIST ]; then
+  echo -e "Detected supported Linux distribution: \e[35m${OS}\e[39m"
+else
+  echo -e "Your Linux distribution (\e[35m${OS}\e[39m) is not supported."
+  promptInput "Do you want to continue? [y/N] " "y n" "n"
+  if [ "$OPT" = "n" ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+fi
+echo 
+
+
 echo
 echo "This shell script will install FWCloud on your system."
 echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
@@ -249,42 +301,15 @@ if [ "$EUID" != "0" ]; then
 fi
 
 
-echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
-#DIST=`cat /etc/issue | head -n 1 | awk '{print $1}'`
-OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
-case $OS in
-  'Ubuntu '*) DIST="Ubuntu";;
-  'Debian '*) DIST="Debian";;
-  'Red Hat Enterprise '*) DIST="RedHat";;
-  'CentOS '*) DIST="CentOS";;
-  'Fedora '*) DIST="Fedora";;
-  'openSUSE '*) DIST="OpenSUSE";;
-  *) DIST="";;
-esac
-setGlobalVars
-
-if [ $DIST ]; then
-  echo -e "Detected supported Linux distribution: \e[35m${OS}\e[39m"
-else
-  echo -e "Your Linux distribution (\e[35m${OS}\e[39m) is not supported."
-  promptInput "Do you want to continue? [y/N] " "y n" "n"
-  if [ "$OPT" = "n" ]; then
-    echo -e "\e[31mInstallation canceled!\e[39m"
-    exit 1
-  fi
-fi
-echo 
-
-
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
 pkgInstall "git" "git"
 pkgInstall "curl" "curl"
 pkgInstall "OpenSSL" "openssl"
-if [ "$DIST" != "OpenSUSE" ]; then
+if [ "$DIST" != "OpenSUSE" -a "$DIST" != "FreeBSD" ]; then
   echo -n "Setting up Node.js repository ... "
-  OUT=`curl -sL ${NODE_SRC} | sudo -E bash -  2>&1 >/dev/null`
+  OUT=`curl -sL ${NODE_SRC} | bash -  2>&1 >/dev/null`
   if [ "$?" != "0" ]; then
     echo
     echo "$OUT"
@@ -293,7 +318,12 @@ if [ "$DIST" != "OpenSUSE" ]; then
   fi
   echo "DONE."
 fi
-pkgInstall "Node.js" "nodejs"
+if [ "$DIST" = "FreeBSD" ]; then
+  pkgInstall "Node.js" "node"
+  pkgInstall "Node-npm" "npm"
+else
+  pkgInstall "Node.js" "nodejs"
+fi
 
 
 # Select database engine.
@@ -335,26 +365,31 @@ else
     fi
   fi
 fi
+
+if [ "$DIST" = "FeeBSD" ]; then
+  sysrc mysql_enable=YES
+  service mysql-server start
+fi
 echo
 
 
 # Check if TPC ports used for fwcloud-api are in use.
 echo -e "\e[32m\e[1m(*) Cheking FWCloud TCP ports.\e[21m\e[0m"
 echo -n "TCP port ${FWCLOUD_API_PORT} for fwcloud-api ... "
-OUT=`lsof -nP -iTCP -sTCP:LISTEN | grep "\:${FWCLOUD_API_PORT}"`
+OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_API_PORT}"`
 if [ "$OUT" ]; then
   echo -e "\e[31mIN USE!\e[39m"
-  lsof -nP -iTCP -sTCP:LISTEN | head -n 1
+  lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | head -n 1
   echo "$OUT"
   exit 1
 fi
 echo "OK."
 
 echo -n "TCP port ${FWCLOUD_WEB_PORT} for fwcloud-ui ... "
-OUT=`lsof -nP -iTCP -sTCP:LISTEN | grep "\:${FWCLOUD_WEB_PORT}"`
+OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_WEB_PORT}"`
 if [ "$OUT" ]; then
   echo -e "\e[31mIN USE!\e[39m"
-  lsof -nP -iTCP -sTCP:LISTEN | head -n 1
+  lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | head -n 1
   echo "$OUT"
   exit 1
 fi
@@ -372,8 +407,16 @@ if [ "$OPT" = "n" ]; then
 fi
 
 if [ ! -d "$REPODIR" ]; then
-  echo -e "\e[31mERROR:\e[39m Directory don't exists: ${REPODIR}"
-  exit 1
+  echo -e "\e[31mERROR:\e[39m Directory doesn't exists: ${REPODIR}"
+  promptInput "Create it? [Y/n] " "y n" "y"
+  if [ "$OPT" = "y" ]; then
+    mkdir "$REPODIR"
+    if [ "$?" != 0 ]; then
+      exit 1
+    fi
+  else
+    exit 1
+  fi
 fi
 
 echo
@@ -393,8 +436,13 @@ fi
 echo
 echo -e "\e[32m\e[1m(*) Setting up permissions.\e[21m\e[0m"
 echo "Creating fwcloud user/group and setting up permissions."
-groupadd fwcloud 2>/dev/null
-useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s /bin/bash 2>/dev/null
+if [ "$DIST" = "FreeBSD" ]; then
+  PW="pw"
+else
+  PW=""
+fi
+$PW groupadd fwcloud 2>/dev/null
+$PW useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s `which bash` 2>/dev/null
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-api/"
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
 
@@ -632,7 +680,7 @@ systemctl start fwcloud-api
 while [ 1 ]; do
   sleep 1
   echo -n "."
-  OUT=`lsof -nP -iTCP -sTCP:LISTEN | grep "\:${FWCLOUD_WEB_PORT}"`
+  OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_WEB_PORT}"`
   if [ "$OUT" ]; then
     break
   fi
