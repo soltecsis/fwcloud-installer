@@ -373,6 +373,18 @@ fi
 echo
 
 
+if [ "$DIST" = "Ubuntu" ]; then
+  # OpenVPN.
+  echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
+  # Check first if we already have one of the installed.
+  promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
+  if [ "$OPT" = "y" ]; then
+    pkgInstall "OpenVPN" "openvpn"
+  fi
+  echo
+fi
+
+
 # Check if TPC ports used for fwcloud-api are in use.
 echo -e "\e[32m\e[1m(*) Cheking FWCloud TCP ports.\e[21m\e[0m"
 echo -n "TCP port ${FWCLOUD_API_PORT} for fwcloud-api ... "
