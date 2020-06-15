@@ -328,7 +328,7 @@ fi
 
 # Select database engine.
 echo -e "\e[32m\e[1m(*) Database engine.\e[21m\e[0m"
-echo "FWCloud needs a MySQL or MariaDB database engine."
+echo "FWCloud needs a MariaDB or MySQL database engine."
 # Check first if we already have one of the installed.
 pkgInstalled "$MARIADB_PKG"
 if [ "$?" = "1" ]; then
@@ -375,10 +375,14 @@ echo
 
 # OpenVPN.
 echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
-# Check first if we already have one of the installed.
-promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
-if [ "$OPT" = "y" ]; then
-  pkgInstall "OpenVPN" "openvpn"
+pkgInstalled "$MARIADB_PKG"
+if [ "$?" = "1" ]; then
+  echo "OpenVPN ... FOUND."
+else
+  promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
+  if [ "$OPT" = "y" ]; then
+    pkgInstall "OpenVPN" "openvpn"
+  fi
 fi
 echo
 
