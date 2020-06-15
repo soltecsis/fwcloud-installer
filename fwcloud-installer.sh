@@ -342,25 +342,25 @@ else
   else
     # OpenSUSE only supports MariaDB.
     if [ "$DIST" = "OpenSUSE" ]; then
-      OPT=2
+      OPT=1
     else 
       echo "Please select the database engine to install:"
-      echo "  (1) MySQL"
-      echo "  (2) MariaDB"
+      echo "  (1) MariaDB"
+      echo "  (2) MySQL"
       promptInput "(1/2)? [1] " "1 2" "1"
       echo
     fi
     if [ "$OPT" = "1" ]; then
-      DBENGINE="MySQL"
-      pkgInstall "MySQL" "$MYSQL_PKG"
-      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
-        startEnableService "mysqld"
-      fi
-    else
       DBENGINE="MariaDB"
       pkgInstall "MariaDB" "$MARIADB_PKG"
       if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
         startEnableService "mariadb"
+      fi
+    else
+      DBENGINE="MySQL"
+      pkgInstall "MySQL" "$MYSQL_PKG"
+      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
+        startEnableService "mysqld"
       fi
     fi
   fi
@@ -373,16 +373,14 @@ fi
 echo
 
 
-if [ "$DIST" = "Ubuntu" ]; then
-  # OpenVPN.
-  echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
-  # Check first if we already have one of the installed.
-  promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
-  if [ "$OPT" = "y" ]; then
-    pkgInstall "OpenVPN" "openvpn"
-  fi
-  echo
+# OpenVPN.
+echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
+# Check first if we already have one of the installed.
+promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
+if [ "$OPT" = "y" ]; then
+  pkgInstall "OpenVPN" "openvpn"
 fi
+echo
 
 
 # Check if TPC ports used for fwcloud-api are in use.
