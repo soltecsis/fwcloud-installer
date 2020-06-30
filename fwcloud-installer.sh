@@ -307,6 +307,7 @@ pkgInstall "lsof" "lsof"
 pkgInstall "git" "git"
 pkgInstall "curl" "curl"
 pkgInstall "OpenSSL" "openssl"
+pkgInstall "osslsigncode" "osslsigncode"
 if [ "$DIST" != "OpenSUSE" -a "$DIST" != "FreeBSD" ]; then
   echo -n "Setting up Node.js repository ... "
   OUT=`curl -sL ${NODE_SRC} | bash -  2>&1 >/dev/null`
