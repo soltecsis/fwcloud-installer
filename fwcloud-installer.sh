@@ -615,14 +615,14 @@ echo
 echo -e "\e[32m\e[1m(*) Creating database schema and initial data.\e[21m\e[0m"
 cd "${REPODIR}/fwcloud-api"
 echo -n "Database schema ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:run" >/dev/null
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:run" >/dev/null
 if [ "$?" != 0 ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
 fi
 echo "DONE."
 echo -n "Initial data ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run fwcloud migration:data" >/dev/null
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:data" >/dev/null
 if [ "$?" != 0 ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
