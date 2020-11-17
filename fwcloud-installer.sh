@@ -119,6 +119,23 @@ promptInput() {
 ################################################################
 
 ################################################################
+promptURL() {
+  # $1=Text message.
+  url_regex='^(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]\.[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]$'
+
+  while [ 1 ]; do
+    echo "$1:"
+    read -e -p "" -i "" URL
+    if [[ $URL =~ $url_regex ]]; then 
+      break
+    else
+      echo -e "\e[31mERROR:\e[39m: Invalid URL."
+    fi
+  done
+}
+################################################################
+
+################################################################
 pkgInstalled() {
   # $1=pkg name.
 
@@ -300,6 +317,25 @@ if [ "$EUID" != "0" ]; then
   exit 1
 fi
 
+# Proxy support.
+echo -e "\e[32m\e[1m(*) HTTP proxy.\e[21m\e[0m"
+echo "As part of the install procedure we will download system packages and NodeJS modules."
+echo "If you use an HTTP proxy you have to specify its URL."
+promptInput "Are you behind an HTTP proxy? [y/N] " "y n" "n"
+if [ "$OPT" = "y" ]; then
+  promptURL "Enter the http proxy URL"
+  HTTP_PROXY_URL="$URL"
+  promptURL "Enter the https proxy URL"
+  HTTPS_PROXY_URL="$URL"
+
+  export http_proxy="$HTTP_PROXY_URL"
+  export https_proxy="$HTTPS_PROXY_URL"
+else
+  HTTP_PROXY_URL=""
+  HTTPS_PROXY_URL=""
+fi
+echo 
+
 
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
@@ -473,14 +509,18 @@ echo -e "\e[32m\e[1m(*) Branch select.\e[21m\e[0m"
 echo "At this moment only the develop branch is available."
 BRANCH="develop"
 echo "Selecting branch for the fwcloud-api project ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; git checkout $BRANCH"
+su - fwcloud -c "cd \"$REPODIR/fwcloud-api\" && git checkout $BRANCH"
 echo "DONE."
 
 
 echo
 echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
 cd "$REPODIR/fwcloud-api"
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm install --loglevel=error"
+NPM_INSTALL_CMD="cd \"$REPODIR/fwcloud-api\" && npm install --loglevel=error"
+if [ "$HTTP_PROXY_URL" ]; then
+  NPM_INSTALL_CMD="npm config set proxy $HTTP_PROXY_URL && npm config set https-proxy $HTTPS_PROXY_URL && $NPM_INSTALL_CMD"
+fi
+su - fwcloud -c "$NPM_INSTALL_CMD"
 if [ "$?" != 0 ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
