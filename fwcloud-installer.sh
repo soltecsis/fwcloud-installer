@@ -425,7 +425,7 @@ echo
 
 
 # Check if TPC ports used for fwcloud-api are in use.
-echo -e "\e[32m\e[1m(*) Cheking FWCloud TCP ports.\e[21m\e[0m"
+echo -e "\e[32m\e[1m(*) Checking FWCloud TCP ports.\e[21m\e[0m"
 echo -n "TCP port ${FWCLOUD_API_PORT} for fwcloud-api ... "
 OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_API_PORT}"`
 if [ "$OUT" ]; then
