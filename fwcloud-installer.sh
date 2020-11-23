@@ -38,6 +38,7 @@ passGen() {
 ################################################################
 setGlobalVars() {
   FWCLOUD_API_PORT="3131"
+  FWCLOUD_UPDATER_PORT="3132"
   FWCLOUD_WEB_PORT="3030"
   REPODIR="/opt"
 
@@ -262,6 +263,66 @@ startEnableService() {
 }
 ################################################################
 
+################################################################
+tcpPortCheck() {
+  echo -n "TCP port ${1} for ${2} ... "
+  OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${1}"`
+  if [ "$OUT" ]; then
+    echo -e "\e[31mIN USE!\e[39m"
+    lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | head -n 1
+    echo "$OUT"
+    exit 1
+  fi
+  echo "OK."
+}
+################################################################
+
+################################################################
+npmInstall() {
+  echo "$1"
+  cd "$REPODIR/$1"
+  NPM_INSTALL_CMD="cd \"$REPODIR/$1\" && npm install --loglevel=error"
+  if [ "$HTTP_PROXY_URL" ]; then
+    NPM_INSTALL_CMD="npm config set proxy $HTTP_PROXY_URL && npm config set https-proxy $HTTPS_PROXY_URL && $NPM_INSTALL_CMD"
+  fi
+  su - fwcloud -c "$NPM_INSTALL_CMD"
+  if [ "$?" != 0 ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+}
+################################################################
+
+################################################################
+runBuild() {
+  echo -n "Compiling $1 (please wait) ... "
+  su - fwcloud -c "cd \"$REPODIR/$1\"; npm run build" >/dev/null
+  if [ "$?" != 0 ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+}
+################################################################
+
+################################################################
+enableStart() {
+  cp "${REPODIR}/$1/config/sys/fwcloud-api.service" /etc/systemd/system/
+  echo -n "Enabling $1 at boot ... "
+  systemctl enable fwcloud-api >/dev/null 2>&1
+  echo "DONE"
+  echo -n "Starting "
+  systemctl start $1
+  while [ 1 ]; do
+    sleep 1
+    echo -n "."
+    OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
+    if [ "$OUT" ]; then
+      break
+    fi
+  done
+}
+################################################################
+
 
 clear
 printCopyright
@@ -300,8 +361,8 @@ echo
 
 
 echo
-echo "This shell script will install FWCloud on your system."
-echo "Projects fwcloud-api and fwcloud-ui will be installed from GitHub."
+echo "This shell script will install/update FWCloud on your system."
+echo "Projects fwcloud-api, fwcloud-ui and fwcloud-updater will be installed from GitHub."
 promptInput "Do you want to continue? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
@@ -426,35 +487,20 @@ echo
 
 # Check if TPC ports used for fwcloud-api are in use.
 echo -e "\e[32m\e[1m(*) Checking FWCloud TCP ports.\e[21m\e[0m"
-echo -n "TCP port ${FWCLOUD_API_PORT} for fwcloud-api ... "
-OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_API_PORT}"`
-if [ "$OUT" ]; then
-  echo -e "\e[31mIN USE!\e[39m"
-  lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | head -n 1
-  echo "$OUT"
-  exit 1
-fi
-echo "OK."
-
-echo -n "TCP port ${FWCLOUD_WEB_PORT} for fwcloud-ui ... "
-OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_WEB_PORT}"`
-if [ "$OUT" ]; then
-  echo -e "\e[31mIN USE!\e[39m"
-  lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | head -n 1
-  echo "$OUT"
-  exit 1
-fi
-echo "OK."
+tcpPortCheck "$FWCLOUD_API_PORT" "fwcloud-api"
+tcpPortCheck "$FWCLOUD_UPDATER_PORT" "fwcloud-updater"
+tcpPortCheck "$FWCLOUD_WEP_PORT" "fwcloud web proxy"
 echo
 
 
 # Cloning GitHub repositories.
 echo -e "\e[32m\e[1m(*) Cloning GitHub repositories.\e[21m\e[0m"
-echo "Now we are going to clone the fwcloud-api and fwcloud-ui GitHub repositories."
+echo "Now we are going to clone the fwcloud-api, fwcloud-ui and fwcloud-updater GitHub repositories."
 echo "These repositories will be cloned into the directory: ${REPODIR}"
 promptInput "Is it right? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
-  read -p "New directory: " REPODIR
+  echo -e "\e[31mInstallation canceled!\e[39m"
+  exit 1
 fi
 
 if [ ! -d "$REPODIR" ]; then
@@ -485,6 +531,14 @@ if [ "$?" != "0" ]; then
 fi
 
 echo
+cd "$REPODIR"
+git clone https://github.com/soltecsis/fwcloud-updater.git
+if [ "$?" != "0" ]; then
+  exit 1
+fi
+
+
+echo
 echo -e "\e[32m\e[1m(*) Setting up permissions.\e[21m\e[0m"
 echo "Creating fwcloud user/group and setting up permissions."
 if [ "$DIST" = "FreeBSD" ]; then
@@ -496,6 +550,7 @@ $PW groupadd fwcloud 2>/dev/null
 $PW useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s `which bash` 2>/dev/null
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-api/"
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
+chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-updater/"
 
 
 echo
@@ -515,25 +570,15 @@ echo "DONE."
 
 echo
 echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
-cd "$REPODIR/fwcloud-api"
-NPM_INSTALL_CMD="cd \"$REPODIR/fwcloud-api\" && npm install --loglevel=error"
-if [ "$HTTP_PROXY_URL" ]; then
-  NPM_INSTALL_CMD="npm config set proxy $HTTP_PROXY_URL && npm config set https-proxy $HTTPS_PROXY_URL && $NPM_INSTALL_CMD"
-fi
-su - fwcloud -c "$NPM_INSTALL_CMD"
-if [ "$?" != 0 ]; then
-  echo -e "\e[31mInstallation canceled!\e[39m"
-  exit 1
-fi
+npmInstall "fwcloud-api"
+npmInstall "fwcloud-updater"
+echo "DONE."
+
 
 echo
 echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
-echo -n "Compiling (please wait) ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; npm run build" >/dev/null
-if [ "$?" != 0 ]; then
-  echo -e "\e[31mInstallation canceled!\e[39m"
-  exit 1
-fi
+runBuild "fwcloud-api"
+runBuild "fwcloud-updater"
 echo "DONE."
 
 
@@ -644,10 +689,6 @@ sed -i "s/TYPEORM_HOST=localhost/TYPEORM_HOST=\"${DBHOST}\"/g" "${ENVFILE}"
 sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=\"${DBNAME}\"/g" "${ENVFILE}"
 sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
 sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=\"${DBPASS}\"/g" "${ENVFILE}"
-if [ "$REPODIR" != "/opt" ]; then
-  echo >> "${ENVFILE}"
-  echo "WEBSRV_DOCROOT=\"${REPODIR}/fwcloud-ui/dist\"" >> "${ENVFILE}"
-fi
 echo "DONE."
 echo
 
@@ -724,22 +765,9 @@ sed -i "s|CORS_WHITELIST=\"http://localhost\"|CORS_WHITELIST=\"${CORSWL}\"|g" "$
 echo
 
 
-echo -e "\e[32m\e[1m(*) Enabling and starting fwcloud-api service.\e[21m\e[0m"
-cp "${REPODIR}/fwcloud-api/config/sys/fwcloud-api.service" /etc/systemd/system/
-sed -i "s|/opt/|${REPODIR}/|g" "/etc/systemd/system/fwcloud-api.service"
-echo -n "Enabling at boot ... "
-systemctl enable fwcloud-api >/dev/null 2>&1
-echo "DONE"
-echo -n "Starting "
-systemctl start fwcloud-api
-while [ 1 ]; do
-  sleep 1
-  echo -n "."
-  OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${FWCLOUD_WEB_PORT}"`
-  if [ "$OUT" ]; then
-    break
-  fi
-done
+echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
+enableStart "fwcloud-api" "$FWCLOUD_WEB_PORT"
+enableStart "fwcloud-updater" "$FWCLOUD_UPDATER_PORT"
 echo " DONE"
 echo
 
