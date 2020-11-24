@@ -37,10 +37,14 @@ passGen() {
 
 ################################################################
 setGlobalVars() {
-  FWCLOUD_API_PORT="3131"
-  FWCLOUD_UPDATER_PORT="3132"
-  FWCLOUD_WEB_PORT="3030"
+  FWC_API_PORT="3131"
+  FWC_UPDATER_PORT="3132"
+  FWC_WEB_PORT="3030"
   REPODIR="/opt"
+
+  if [ -d "$REPODIR/fwcloud-api" ]; then FWC_API_ACTION="U"; else FWC_API_ACTION="I"; fi
+  if [ -d "$REPODIR/fwcloud-updater" ]; then FWC_UPDATER_ACTION="U"; else FWC_UPDATER_ACTION="I"; fi
+  if [ -d "$REPODIR/fwcloud-ui" ]; then FWC_UI_ACTION="U"; else FWC_UI_ACTION="I"; fi
 
   PKGM_CMD="apt install -y"
   NODE_SRC="https://deb.nodesource.com/setup_12.x"
@@ -306,9 +310,10 @@ runBuild() {
 
 ################################################################
 enableStart() {
-  cp "${REPODIR}/$1/config/sys/fwcloud-api.service" /etc/systemd/system/
+  cp "${REPODIR}/${1}/config/sys/${1}.service" /etc/systemd/system/
+  systemctl daemon-reload
   echo -n "Enabling $1 at boot ... "
-  systemctl enable fwcloud-api >/dev/null 2>&1
+  systemctl enable $1 >/dev/null 2>&1
   echo "DONE"
   echo -n "Starting "
   systemctl start $1
@@ -320,6 +325,64 @@ enableStart() {
       break
     fi
   done
+}
+################################################################
+
+################################################################
+gitCloneOrUpdate() {
+  echo
+  cd "$REPODIR"
+
+  if [ -d "$REPODIR/$1" ]; then
+    echo "Updating $1 ..."
+    cd "$1"
+    NEEDS_UP_TO_DATE=`git pull --dry-run 2<&1`
+    if [ ! "$NEEDS_UP_TO_DATE" ]; then
+      echo "Don't needs update, it is already up to date."
+      return
+    fi
+
+    EXISTS_UPDATE_SCRIPT=`grep "\"update\":" package.json`
+    if [ "$EXISTS_UPDATE_SCRIPT" ]; then
+      npm run update
+      if [ "$?" != "0" ]; then
+        exit 1
+      fi
+    else
+      if [ "$1" = "fwcloud-ui" ]; then
+        git pull
+        return
+      fi
+
+      SYSTEMD_FILE="/etc/systemd/system/${1}.service"
+      if [ -f "$SYSTEMD_FILE" ]; then
+        systemctl stop "$1"
+      fi
+      
+      git pull && npm install && npm run build
+      if [ "$?" != "0" ]; then
+        exit 1
+      fi
+
+      if [ "$1" = "fwcloud-api" ]; then
+        node fwcli migration:run
+      fi
+
+      # Update systemd file.
+      cp "${REPODIR}/${1}/config/sys/${1}.service" /etc/systemd/system/
+      systemctl daemon-reload
+
+      if [ -f "$SYSTEMD_FILE" ]; then
+        systemctl start "$1"
+      fi
+    fi
+  else
+    echo "Cloning $1 ..."
+    git clone "https://github.com/soltecsis/${1}.git"
+    if [ "$?" != "0" ]; then
+      exit 1
+    fi
+  fi
 }
 ################################################################
 
@@ -377,6 +440,7 @@ if [ "$EUID" != "0" ]; then
   echo -e "\e[31mERROR:\e[39m Please run this script as root or using the sudo command."
   exit 1
 fi
+
 
 # Proxy support.
 echo -e "\e[32m\e[1m(*) HTTP proxy.\e[21m\e[0m"
@@ -485,18 +549,25 @@ fi
 echo
 
 
-# Check if TPC ports used for fwcloud-api are in use.
-echo -e "\e[32m\e[1m(*) Checking FWCloud TCP ports.\e[21m\e[0m"
-tcpPortCheck "$FWCLOUD_API_PORT" "fwcloud-api"
-tcpPortCheck "$FWCLOUD_UPDATER_PORT" "fwcloud-updater"
-tcpPortCheck "$FWCLOUD_WEP_PORT" "fwcloud web proxy"
-echo
+# Check if TPC ports used for fwcloud-api and fwcloud-updater are in use.
+if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" -o "$FWC_UI_ACTION" = "I" ]; then
+  echo -e "\e[32m\e[1m(*) Checking FWCloud TCP ports.\e[21m\e[0m"
+  if [ "$FWC_API_ACTION" = "I" ]; then 
+    tcpPortCheck "$FWC_API_PORT" "fwcloud-api (API)" 
+    tcpPortCheck "$FWC_WEB_PORT" "fwcloud-api (WEB)"
+  fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then tcpPortCheck "$FWC_UPDATER_PORT" "fwcloud-updater"; fi
+  echo
+fi
 
 
-# Cloning GitHub repositories.
-echo -e "\e[32m\e[1m(*) Cloning GitHub repositories.\e[21m\e[0m"
-echo "Now we are going to clone the fwcloud-api, fwcloud-ui and fwcloud-updater GitHub repositories."
-echo "These repositories will be cloned into the directory: ${REPODIR}"
+# Cloning or updating GitHub repositories.
+echo -e "\e[32m\e[1m(*) Cloning/updating GitHub repositories.\e[21m\e[0m"
+echo "We are going to clone/update the next FWCloud repositories:"
+echo -e "\e[96mfwcloud-api\e[39m      (https://github.com/soltecsis/fwcloud-api.git)"
+echo -e "\e[96mfwcloud-ui\e[39m       (https://github.com/soltecsis/fwcloud-ui.git)"
+echo -e "\e[96mfwcloud-updater\e[39m  (https://github.com/soltecsis/fwcloud-updater.git)"
+echo "These repositories will be cloned/updated into the directory: ${REPODIR}"
 promptInput "Is it right? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
@@ -516,26 +587,9 @@ if [ ! -d "$REPODIR" ]; then
   fi
 fi
 
-echo
-cd "$REPODIR"
-git clone https://github.com/soltecsis/fwcloud-api.git
-if [ "$?" != "0" ]; then
-  exit 1
-fi
-
-echo
-cd "$REPODIR"
-git clone https://github.com/soltecsis/fwcloud-ui.git
-if [ "$?" != "0" ]; then
-  exit 1
-fi
-
-echo
-cd "$REPODIR"
-git clone https://github.com/soltecsis/fwcloud-updater.git
-if [ "$?" != "0" ]; then
-  exit 1
-fi
+gitCloneOrUpdate "fwcloud-api"
+gitCloneOrUpdate "fwcloud-ui"
+gitCloneOrUpdate "fwcloud-updater"
 
 
 echo
@@ -553,223 +607,231 @@ chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
 chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-updater/"
 
 
-echo
-echo -e "\e[32m\e[1m(*) Branch select.\e[21m\e[0m"
-#promptInput "Select git branch (master/develop) ? [M/d] " "m d" "m"
-#if [ "$OPT" = "m" ]; then
-#  BRANCH="master"
-#else
-#  BRANCH="develop"
-#fi
-echo "At this moment only the develop branch is available."
-BRANCH="develop"
-echo "Selecting branch for the fwcloud-api project ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\" && git checkout $BRANCH"
-echo "DONE."
+if [ "$FWC_API_ACTION" = "I" ]; then
+  echo
+  echo -e "\e[32m\e[1m(*) Branch select for fwcloud-api.\e[21m\e[0m"
+  #promptInput "Select git branch (master/develop) ? [M/d] " "m d" "m"
+  #if [ "$OPT" = "m" ]; then
+  #  BRANCH="master"
+  #else
+  #  BRANCH="develop"
+  #fi
+  echo "At this moment only the develop branch is available."
+  BRANCH="develop"
+  echo "Selecting branch for the fwcloud-api project ... "
+  su - fwcloud -c "cd \"$REPODIR/fwcloud-api\" && git checkout $BRANCH"
+  echo "DONE."
+fi
+
+if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+  echo
+  echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
+  if [ "$FWC_API_ACTION" = "I" ]; then npmInstall "fwcloud-api"; fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then npmInstall "fwcloud-updater"; fi
+  echo "DONE."
+fi
 
 
-echo
-echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
-npmInstall "fwcloud-api"
-npmInstall "fwcloud-updater"
-echo "DONE."
+if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+  echo
+  echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
+  if [ "$FWC_API_ACTION" = "I" ]; then runBuild "fwcloud-api"; fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then runBuild "fwcloud-updater"; fi
+  echo "DONE."
+fi
 
 
-echo
-echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
-runBuild "fwcloud-api"
-runBuild "fwcloud-updater"
-echo "DONE."
-
-
-# Create fwcloud database.
-# Fisrt check if we need the database engine root password.
-echo
-echo -e "\e[32m\e[1m(*) FWCloud database.\e[21m\e[0m"
-echo "Next we are going to create the fwcloud database."
-MYSQL_CMD="`which mysql` -u root"
-OUT=`echo "show databases" | $MYSQL_CMD 2>&1`
-if [ "$?" != 0 ]; then # We have had an error accesing the database server.
-  # Analyze the error.
-  if echo "$OUT" | grep -q "Access denied"; then
-    while [ 1 ]; do
-      echo "The database engine root password is needed."
-      read -s -p "Password: " DBPASS
-      echo
-      OUT=`echo "show databases" | $MYSQL_CMD -p"${DBPASS}" 2>&1`
-      if [ "$?" = 0 ]; then
-        break
-      else 
-        echo "$OUT"
+if [ "$FWC_API_ACTION" = "I" ]; then
+  # Create fwcloud database.
+  # Fisrt check if we need the database engine root password.
+  echo
+  echo -e "\e[32m\e[1m(*) FWCloud database.\e[21m\e[0m"
+  echo "Next we are going to create the fwcloud database."
+  MYSQL_CMD="`which mysql` -u root"
+  OUT=`echo "show databases" | $MYSQL_CMD 2>&1`
+  if [ "$?" != 0 ]; then # We have had an error accesing the database server.
+    # Analyze the error.
+    if echo "$OUT" | grep -q "Access denied"; then
+      while [ 1 ]; do
+        echo "The database engine root password is needed."
+        read -s -p "Password: " DBPASS
         echo
+        OUT=`echo "show databases" | $MYSQL_CMD -p"${DBPASS}" 2>&1`
+        if [ "$?" = 0 ]; then
+          break
+        else 
+          echo "$OUT"
+          echo
+        fi
+      done
+      MYSQL_CMD="${MYSQL_CMD} -p\"${DBPASS}\" 2>&1"
+    else
+      echo -e "\e[31mERROR:\e[39m Connecting to database engine."
+      echo "$OUT"
+      exit 1
+    fi
+  fi
+
+  # Support for MySQL 8.
+  IDENTIFIED_BY="identified by"
+  if [ "$DBENGINE" = "MySQL" ]; then
+    # Get MySQL major version number.
+    MYSQL_VERSION_MAJOR_NUMBER=`echo "show variables like 'version'" | ${MYSQL_CMD} -N | awk '{print $2}' | awk -F"." '{print $1}'`
+    if [ $MYSQL_VERSION_MAJOR_NUMBER -ge 8 ]; then
+      IDENTIFIED_BY="identified with mysql_native_password by"
+    fi 
+  fi
+
+  # Define database data.
+  DBHOST="localhost"
+  DBNAME="fwcloud"
+  DBUSER="fwcdbusr"
+  passGen 16
+  DBPASS="$PASSGEN"
+  echo "The next data will be used for it."
+  echo -e "      \e[1mHost:\e[0m $DBHOST"
+  echo -e "  \e[1mDatabase:\e[0m $DBNAME"
+  echo -e "      \e[1mUser:\e[0m $DBUSER"
+  echo -e "  \e[1mPassword:\e[0m $DBPASS"
+  promptInput "Is it right? [Y/n] " "y n" "y"
+  if [ "$OPT" = "n" ]; then
+    while [ 1 ]; do
+      echo
+      echo "Enter new database data:"
+      read -p "      Host: " DBHOST
+      read -p "  Database: " DBNAME
+      read -p "      User: " DBUSER
+      read -p "  Password: " DBPASS
+
+      echo
+      echo "These are the new database access data:"
+      echo -e "      \e[1mHost:\e[0m $DBHOST"
+      echo -e "  \e[1mDatabase:\e[0m $DBNAME"
+      echo -e "      \e[1mUser:\e[0m $DBUSER"
+      echo -e "  \e[1mPassword:\e[0m $DBPASS"
+      promptInput "Is it right? [Y/n] " "y n" "y"
+      if [ "$OPT" = "y" ]; then
+        break
       fi
     done
-    MYSQL_CMD="${MYSQL_CMD} -p\"${DBPASS}\" 2>&1"
-  else
-    echo -e "\e[31mERROR:\e[39m Connecting to database engine."
-    echo "$OUT"
+  fi
+
+  # Now check if the fwcloud database already exists.
+  OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
+  if [ "$OUT" ]; then
+    echo -e "\e[31mWARNING:\e[39m Database '$DBNAME' already exists."
+    echo "If you continue the existing database will be destroyed."
+    promptInput "Do you want to continue? [y/N] " "y n" "n"
+    if [ "$OPT" = "n" ]; then
+      echo -e "\e[31mInstallation canceled!\e[39m"
+      exit 1
+    fi
+    runSql "drop database $DBNAME"
+    runSql "drop user '${DBUSER}'@'${DBHOST}'" "I"
+  fi
+  runSql "create database $DBNAME CHARACTER SET utf8 COLLATE utf8_general_ci"
+  runSql "create user '${DBUSER}'@'${DBHOST}' ${IDENTIFIED_BY} '${DBPASS}'"
+  runSql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
+  runSql "flush privileges"
+  echo
+
+
+  # Generate the .env file for fwcloud-api.
+  echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
+  ENVFILE="${REPODIR}/fwcloud-api/.env"
+  cp -pr "${ENVFILE}.example" "${ENVFILE}"
+  sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
+  passGen 64
+  sed -i "s/SESSION_SECRET=/SESSION_SECRET=\"$PASSGEN\"/g" "${ENVFILE}"
+  passGen 64
+  sed -i "s/CRYPT_SECRET=/CRYPT_SECRET=\"$PASSGEN\"/g" "${ENVFILE}"
+  sed -i "s/TYPEORM_HOST=localhost/TYPEORM_HOST=\"${DBHOST}\"/g" "${ENVFILE}"
+  sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=\"${DBNAME}\"/g" "${ENVFILE}"
+  sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
+  sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=\"${DBPASS}\"/g" "${ENVFILE}"
+  echo "DONE."
+  echo
+
+
+  echo -e "\e[32m\e[1m(*) Creating database schema and initial data.\e[21m\e[0m"
+  cd "${REPODIR}/fwcloud-api"
+  echo -n "Database schema ... "
+  su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:run" >/dev/null
+  if [ "$?" != 0 ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
-fi
+  echo "DONE."
+  echo -n "Initial data ... "
+  su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:data" >/dev/null
+  if [ "$?" != 0 ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+  echo "DONE."
+  echo
 
-# Support for MySQL 8.
-IDENTIFIED_BY="identified by"
-if [ "$DBENGINE" = "MySQL" ]; then
-  # Get MySQL major version number.
-  MYSQL_VERSION_MAJOR_NUMBER=`echo "show variables like 'version'" | ${MYSQL_CMD} -N | awk '{print $2}' | awk -F"." '{print $1}'`
-  if [ $MYSQL_VERSION_MAJOR_NUMBER -ge 8 ]; then
-    IDENTIFIED_BY="identified with mysql_native_password by"
-  fi 
-fi
 
-# Define database data.
-DBHOST="localhost"
-DBNAME="fwcloud"
-DBUSER="fwcdbusr"
-passGen 16
-DBPASS="$PASSGEN"
-echo "The next data will be used for it."
-echo -e "      \e[1mHost:\e[0m $DBHOST"
-echo -e "  \e[1mDatabase:\e[0m $DBNAME"
-echo -e "      \e[1mUser:\e[0m $DBUSER"
-echo -e "  \e[1mPassword:\e[0m $DBPASS"
-promptInput "Is it right? [Y/n] " "y n" "y"
-if [ "$OPT" = "n" ]; then
+  # TLS setup.
+  echo -e "\e[32m\e[1m(*) Secure communications.\e[21m\e[0m"
+  echo "Although it is possible to use communication without encryption, both at the user interface"
+  echo "and the API level, it is something that should only be done in a development environment."
+  echo "In a production environment it is highly advisable to use encrypted communications" 
+  echo "both at the level of access to the user interface and in accessing the API."
+  promptInput "Do you want to use secure communications? [Y/n] " "y n" "y"
+  if [ "$OPT" = "y" ]; then
+    HTTP_PROTOCOL="https://"
+    mkdir "${REPODIR}/fwcloud-api/config/tls"
+    chown fwcloud:fwcloud "${REPODIR}/fwcloud-api/config/tls"
+    cd "${REPODIR}/fwcloud-api/config/tls"
+    buildTlsCertificate fwcloud-web
+    echo
+    buildTlsCertificate fwcloud-api
+  else
+    HTTP_PROTOCOL="http://"
+    echo >> "${ENVFILE}"
+    echo >> "${ENVFILE}"
+    echo "WEBSRV_HTTPS=false" >> "${ENVFILE}"
+    echo "WEBSRV_API_URL=\"http://localhost:${FWC_API_PORT}\"" >> "${ENVFILE}"
+    echo "APISRV_HTTPS=false" >> "${ENVFILE}"
+    echo "SESSION_FORCE_HTTPS=false" >> "${ENVFILE}"
+  fi
+  echo 
+
+
+  # CORS.
+  echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) whitelist setup.\e[21m\e[0m"
+  echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
+  IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
+  CORSWL=""
+  for IP in $IPL; do
+    if [ ! -z "$CORSWL" ]; then
+      CORSWL="$CORSWL, "
+    fi
+    CORSWL="${CORSWL}${HTTP_PROTOCOL}${IP}:3030"
+  done
   while [ 1 ]; do
-    echo
-    echo "Enter new database data:"
-    read -p "      Host: " DBHOST
-    read -p "  Database: " DBNAME
-    read -p "      User: " DBUSER
-    read -p "  Password: " DBPASS
+    echo -e "CORS white list: \e[1m${CORSWL}\e[0m"
 
-    echo
-    echo "These are the new database access data:"
-    echo -e "      \e[1mHost:\e[0m $DBHOST"
-    echo -e "  \e[1mDatabase:\e[0m $DBNAME"
-    echo -e "      \e[1mUser:\e[0m $DBUSER"
-    echo -e "  \e[1mPassword:\e[0m $DBPASS"
     promptInput "Is it right? [Y/n] " "y n" "y"
     if [ "$OPT" = "y" ]; then
       break
     fi
+
+    echo "Enter the new CORS white list (coma separated items):"
+    read -e -p "" -i "$CORSWL" CORSWL
   done
+  sed -i "s|CORS_WHITELIST=\"http://localhost\"|CORS_WHITELIST=\"${CORSWL}\"|g" "${ENVFILE}"
 fi
-
-# Now check if the fwcloud database already exists.
-OUT=`echo "show databases" | $MYSQL_CMD 2>&1 | grep "^${DBNAME}$"`
-if [ "$OUT" ]; then
-  echo -e "\e[31mWARNING:\e[39m Database '$DBNAME' already exists."
-  echo "If you continue the existing database will be destroyed."
-  promptInput "Do you want to continue? [y/N] " "y n" "n"
-  if [ "$OPT" = "n" ]; then
-    echo -e "\e[31mInstallation canceled!\e[39m"
-    exit 1
-  fi
-  runSql "drop database $DBNAME"
-  runSql "drop user '${DBUSER}'@'${DBHOST}'" "I"
-fi
-runSql "create database $DBNAME CHARACTER SET utf8 COLLATE utf8_general_ci"
-runSql "create user '${DBUSER}'@'${DBHOST}' ${IDENTIFIED_BY} '${DBPASS}'"
-runSql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
-runSql "flush privileges"
 echo
 
-
-# Generate the .env file for fwcloud-api.
-echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
-ENVFILE="${REPODIR}/fwcloud-api/.env"
-cp -pr "${ENVFILE}.example" "${ENVFILE}"
-sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
-passGen 64
-sed -i "s/SESSION_SECRET=/SESSION_SECRET=\"$PASSGEN\"/g" "${ENVFILE}"
-passGen 64
-sed -i "s/CRYPT_SECRET=/CRYPT_SECRET=\"$PASSGEN\"/g" "${ENVFILE}"
-sed -i "s/TYPEORM_HOST=localhost/TYPEORM_HOST=\"${DBHOST}\"/g" "${ENVFILE}"
-sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=\"${DBNAME}\"/g" "${ENVFILE}"
-sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
-sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=\"${DBPASS}\"/g" "${ENVFILE}"
-echo "DONE."
-echo
-
-
-echo -e "\e[32m\e[1m(*) Creating database schema and initial data.\e[21m\e[0m"
-cd "${REPODIR}/fwcloud-api"
-echo -n "Database schema ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:run" >/dev/null
-if [ "$?" != 0 ]; then
-  echo -e "\e[31mInstallation canceled!\e[39m"
-  exit 1
-fi
-echo "DONE."
-echo -n "Initial data ... "
-su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:data" >/dev/null
-if [ "$?" != 0 ]; then
-  echo -e "\e[31mInstallation canceled!\e[39m"
-  exit 1
-fi
-echo "DONE."
-echo
-
-
-# TLS setup.
-echo -e "\e[32m\e[1m(*) Secure communications.\e[21m\e[0m"
-echo "Although it is possible to use communication without encryption, both at the user interface"
-echo "and the API level, it is something that should only be done in a development environment."
-echo "In a production environment it is highly advisable to use encrypted communications" 
-echo "both at the level of access to the user interface and in accessing the API."
-promptInput "Do you want to use secure communications? [Y/n] " "y n" "y"
-if [ "$OPT" = "y" ]; then
-  HTTP_PROTOCOL="https://"
-  mkdir "${REPODIR}/fwcloud-api/config/tls"
-  chown fwcloud:fwcloud "${REPODIR}/fwcloud-api/config/tls"
-  cd "${REPODIR}/fwcloud-api/config/tls"
-  buildTlsCertificate fwcloud-web
+if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+  echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
+  if [ "$FWC_API_ACTION" = "I" ]; then enableStart "fwcloud-api" "$FWC_WEB_PORT"; fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStart "fwcloud-updater" "$FWC_UPDATER_PORT"; fi
+  echo " DONE"
   echo
-  buildTlsCertificate fwcloud-api
-else
-  HTTP_PROTOCOL="http://"
-  echo >> "${ENVFILE}"
-  echo >> "${ENVFILE}"
-  echo "WEBSRV_HTTPS=false" >> "${ENVFILE}"
-  echo "WEBSRV_API_URL=\"http://localhost:3131\"" >> "${ENVFILE}"
-  echo "APISRV_HTTPS=false" >> "${ENVFILE}"
-  echo "SESSION_FORCE_HTTPS=false" >> "${ENVFILE}"
 fi
-echo 
-
-
-# CORS.
-echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) whitelist setup.\e[21m\e[0m"
-echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
-IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
-CORSWL=""
-for IP in $IPL; do
-  if [ ! -z "$CORSWL" ]; then
-    CORSWL="$CORSWL, "
-  fi
-  CORSWL="${CORSWL}${HTTP_PROTOCOL}${IP}:3030"
-done
-while [ 1 ]; do
-  echo -e "CORS white list: \e[1m${CORSWL}\e[0m"
-
-  promptInput "Is it right? [Y/n] " "y n" "y"
-  if [ "$OPT" = "y" ]; then
-    break
-  fi
-
-  echo "Enter the new CORS white list (coma separated items):"
-  read -e -p "" -i "$CORSWL" CORSWL
-done
-sed -i "s|CORS_WHITELIST=\"http://localhost\"|CORS_WHITELIST=\"${CORSWL}\"|g" "${ENVFILE}"
-echo
-
-
-echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
-enableStart "fwcloud-api" "$FWCLOUD_WEB_PORT"
-enableStart "fwcloud-updater" "$FWCLOUD_UPDATER_PORT"
-echo " DONE"
-echo
 
 echo -e "\e[32m\e[1m--- PROCESS COMPLETED ----\e[21m\e[0m"
 echo "Your FWCloud system is ready!"
