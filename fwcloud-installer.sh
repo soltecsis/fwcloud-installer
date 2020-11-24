@@ -306,6 +306,7 @@ runBuild() {
     echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
+  echo "DONE."
 }
 ################################################################
 
@@ -323,7 +324,7 @@ enableStart() {
     echo -n "."
     OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
     if [ "$OUT" ]; then
-      echo
+      echo "DONE."
       break
     fi
   done
@@ -640,7 +641,6 @@ if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
   if [ "$FWC_API_ACTION" = "I" ]; then runBuild "fwcloud-api"; fi
   if [ "$FWC_UPDATER_ACTION" = "I" ]; then runBuild "fwcloud-updater"; fi
-  echo "DONE."
 fi
 
 
@@ -832,7 +832,6 @@ if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
   if [ "$FWC_API_ACTION" = "I" ]; then enableStart "fwcloud-api" "$FWC_WEB_PORT"; fi
   if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStart "fwcloud-updater" "$FWC_UPDATER_PORT"; fi
-  echo " DONE"
   echo
 fi
 
