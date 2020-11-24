@@ -47,7 +47,8 @@ setGlobalVars() {
   if [ -d "$REPODIR/fwcloud-ui" ]; then FWC_UI_ACTION="U"; else FWC_UI_ACTION="I"; fi
 
   PKGM_CMD="apt install -y"
-  NODE_SRC="https://deb.nodesource.com/setup_12.x"
+  NODE_SETUP="setup_14.x"
+  NODE_SRC="https://deb.nodesource.com/${NODE_SETUP}"
   MYSQL_PKG="mysql-server"
   MARIADB_PKG="mariadb-server"
 
@@ -61,12 +62,12 @@ setGlobalVars() {
 
     'RedHat'|'CentOS') 
       PKGM_CMD="yum install -y"
-      NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+      NODE_SRC="https://rpm.nodesource.com/${NODE_SETUP}"
       ;;
 
     'Fedora') 
       PKGM_CMD="yum install -y"
-      NODE_SRC="https://rpm.nodesource.com/setup_12.x"
+      NODE_SRC="https://rpm.nodesource.com/${NODE_SETUP}"
       MYSQL_PKG="community-mysql-server"
       ;;
 
