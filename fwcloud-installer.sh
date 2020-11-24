@@ -183,9 +183,9 @@ pkgInstall() {
   if [ "$?" = "0" ]; then
     echo -e "\e[1m\e[33mNOT FOUND. \e[39mInstalling ... \e[0m"
     $PKGM_CMD $2
-    echo "DONE."
+    echo "DONE"
   else
-    echo "FOUND."
+    echo "FOUND"
   fi
   echo
 }
@@ -252,7 +252,7 @@ buildTlsCertificate() {
   rm "${1}.csr"
 
   chown fwcloud:fwcloud "${1}.key" "${1}.crt"
-  echo "DONE."
+  echo "DONE"
 }
 ################################################################
 
@@ -306,7 +306,7 @@ runBuild() {
     echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
-  echo "DONE."
+  echo "DONE"
 }
 ################################################################
 
@@ -324,7 +324,7 @@ enableStart() {
     echo -n "."
     OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
     if [ "$OUT" ]; then
-      echo "DONE."
+      echo " DONE"
       break
     fi
   done
@@ -481,7 +481,7 @@ if [ "$DIST" != "OpenSUSE" -a "$DIST" != "FreeBSD" ]; then
     echo -e "\e[31mERROR!\e[39m"
     exit 1
   fi
-  echo "DONE."
+  echo "DONE"
 fi
 if [ "$DIST" = "FreeBSD" ]; then
   pkgInstall "Node.js" "node"
@@ -498,12 +498,12 @@ echo "FWCloud needs a MariaDB or MySQL database engine."
 pkgInstalled "$MARIADB_PKG"
 if [ "$?" = "1" ]; then
   DBENGINE="MariaDB"
-  echo "MariaDB ... FOUND."
+  echo "MariaDB ... FOUND"
 else
   pkgInstalled "$MYSQL_PKG"
   if [ "$?" = "1" ]; then
     DBENGINE="MySQL"
-    echo "MySQL ... FOUND."
+    echo "MySQL ... FOUND"
   else
     # OpenSUSE only supports MariaDB.
     if [ "$DIST" = "OpenSUSE" ]; then
@@ -542,7 +542,7 @@ echo
 echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
 pkgInstalled "$MARIADB_PKG"
 if [ "$?" = "1" ]; then
-  echo "OpenVPN ... FOUND."
+  echo "OpenVPN ... FOUND"
 else
   promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
   if [ "$OPT" = "y" ]; then
@@ -623,7 +623,7 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   BRANCH="develop"
   echo "Selecting branch for the fwcloud-api project ... "
   su - fwcloud -c "cd \"$REPODIR/fwcloud-api\" && git checkout $BRANCH"
-  echo "DONE."
+  echo "DONE"
 fi
 
 if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
@@ -632,7 +632,7 @@ if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   if [ "$FWC_API_ACTION" = "I" ]; then npmInstall "fwcloud-api"; fi
   echo
   if [ "$FWC_UPDATER_ACTION" = "I" ]; then npmInstall "fwcloud-updater"; fi
-  echo "DONE."
+  echo "DONE"
 fi
 
 
@@ -752,7 +752,7 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   sed -i "s/TYPEORM_DATABASE=fwcloud/TYPEORM_DATABASE=\"${DBNAME}\"/g" "${ENVFILE}"
   sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
   sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=\"${DBPASS}\"/g" "${ENVFILE}"
-  echo "DONE."
+  echo "DONE"
   echo
 
 
@@ -764,14 +764,14 @@ if [ "$FWC_API_ACTION" = "I" ]; then
     echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
-  echo "DONE."
+  echo "DONE"
   echo -n "Initial data ... "
   su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:data" >/dev/null
   if [ "$?" != 0 ]; then
     echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
-  echo "DONE."
+  echo "DONE"
   echo
 
 
