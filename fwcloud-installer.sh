@@ -283,7 +283,7 @@ tcpPortCheck() {
 
 ################################################################
 npmInstall() {
-  echo "$1"
+  echo -e "\e[96m${1}\e[39m"
   cd "$REPODIR/$1"
   NPM_INSTALL_CMD="cd \"$REPODIR/$1\" && npm install --loglevel=error"
   if [ "$HTTP_PROXY_URL" ]; then
@@ -322,6 +322,7 @@ enableStart() {
     echo -n "."
     OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
     if [ "$OUT" ]; then
+      echo
       break
     fi
   done
@@ -627,6 +628,7 @@ if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo
   echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
   if [ "$FWC_API_ACTION" = "I" ]; then npmInstall "fwcloud-api"; fi
+  echo
   if [ "$FWC_UPDATER_ACTION" = "I" ]; then npmInstall "fwcloud-updater"; fi
   echo "DONE."
 fi
