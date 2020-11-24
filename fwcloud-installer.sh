@@ -278,7 +278,7 @@ tcpPortCheck() {
     echo "$OUT"
     exit 1
   fi
-  echo "OK."
+  echo "OK"
 }
 ################################################################
 
@@ -300,7 +300,7 @@ npmInstall() {
 
 ################################################################
 runBuild() {
-  echo "Compiling $1 (please wait) ... "
+  echo -n "Compiling $1 (please wait) ... "
   su - fwcloud -c "cd \"$REPODIR/$1\"; npm run build" >/dev/null
   if [ "$?" != 0 ]; then
     echo -e "\e[31mInstallation canceled!\e[39m"
