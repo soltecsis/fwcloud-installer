@@ -345,6 +345,17 @@ gitCloneOrUpdate() {
       return
     fi
 
+    git pull
+    if [ "$?" != "0" ]; then
+      exit 1
+    fi
+
+    if [ "$1" = "fwcloud-api" -o "$1" = "fwcloud-updater" ]; then
+      # Update systemd file.
+      cp "${REPODIR}/${1}/config/sys/${1}.service" /etc/systemd/system/
+      systemctl daemon-reload
+    fi
+
     EXISTS_UPDATE_SCRIPT=`grep "\"update\":" package.json`
     if [ "$EXISTS_UPDATE_SCRIPT" ]; then
       npm run update
@@ -353,16 +364,12 @@ gitCloneOrUpdate() {
       fi
     else
       if [ "$1" = "fwcloud-ui" ]; then
-        git pull
         return
       fi
 
-      SYSTEMD_FILE="/etc/systemd/system/${1}.service"
-      if [ -f "$SYSTEMD_FILE" ]; then
-        systemctl stop "$1"
-      fi
+      systemctl stop "$1"
       
-      git pull && npm install && npm run build
+      npm install && npm run build
       if [ "$?" != "0" ]; then
         exit 1
       fi
@@ -371,13 +378,7 @@ gitCloneOrUpdate() {
         node fwcli migration:run
       fi
 
-      # Update systemd file.
-      cp "${REPODIR}/${1}/config/sys/${1}.service" /etc/systemd/system/
-      systemctl daemon-reload
-
-      if [ -f "$SYSTEMD_FILE" ]; then
-        systemctl start "$1"
-      fi
+      systemctl start "$1"
     fi
   else
     echo "Cloning $1 ..."
@@ -567,9 +568,12 @@ fi
 # Cloning or updating GitHub repositories.
 echo -e "\e[32m\e[1m(*) Cloning/updating GitHub repositories.\e[21m\e[0m"
 echo "We are going to clone/update the next FWCloud repositories:"
-echo -e "\e[96mfwcloud-api\e[39m      (https://github.com/soltecsis/fwcloud-api.git)"
-echo -e "\e[96mfwcloud-ui\e[39m       (https://github.com/soltecsis/fwcloud-ui.git)"
-echo -e "\e[96mfwcloud-updater\e[39m  (https://github.com/soltecsis/fwcloud-updater.git)"
+if [ "$FWC_API_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
+echo -e "\e[96mfwcloud-api\e[39m      ${ACT_STR}  (https://github.com/soltecsis/fwcloud-api.git)"
+if [ "$FWC_UI_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
+echo -e "\e[96mfwcloud-ui\e[39m       ${ACT_STR}  (https://github.com/soltecsis/fwcloud-ui.git)"
+if [ "$FWC_UPDATER_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
+echo -e "\e[96mfwcloud-updater\e[39m  ${ACT_STR}  (https://github.com/soltecsis/fwcloud-updater.git)"
 echo "These repositories will be cloned/updated into the directory: ${REPODIR}"
 promptInput "Is it right? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
