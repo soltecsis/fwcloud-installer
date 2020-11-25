@@ -842,13 +842,16 @@ fi
 echo -e "\e[32m\e[1m--- PROCESS COMPLETED ----\e[21m\e[0m"
 echo "Your FWCloud system is ready!"
 echo
-echo -e "Access it using one of the CORS white list URLs: \e[96m$CORSWL\e[0m"
-echo
-echo "These are the default login credentials:"
-echo -e "  Customer code: \e[96m1\e[0m"
-echo -e "       Username: \e[96mfwcadmin\e[0m"
-echo -e "       Password: \e[96mfwcadmin\e[0m"
-echo
+
+if [ "$FWC_API_ACTION" = "I" ]; then
+  echo -e "Access it using one of the CORS white list URLs: \e[96m$CORSWL\e[0m"
+  echo
+  echo "These are the default login credentials:"
+  echo -e "  Customer code: \e[96m1\e[0m"
+  echo -e "       Username: \e[96mfwcadmin\e[0m"
+  echo -e "       Password: \e[96mfwcadmin\e[0m"
+  echo
+fi
 
 pkgInstalled "firewalld"
 if [ "$?" = "1" ]; then
