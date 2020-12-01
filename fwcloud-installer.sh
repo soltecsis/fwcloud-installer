@@ -39,12 +39,13 @@ passGen() {
 setGlobalVars() {
   FWC_API_PORT="3131"
   FWC_UPDATER_PORT="3132"
-  FWC_WEB_PORT="3030"
-  REPODIR="/opt"
+  FWC_WEBSRV_PORT="3030"
+  REPODIR="/opt/fwcloud"
 
-  if [ -d "$REPODIR/fwcloud-api" ]; then FWC_API_ACTION="U"; else FWC_API_ACTION="I"; fi
-  if [ -d "$REPODIR/fwcloud-updater" ]; then FWC_UPDATER_ACTION="U"; else FWC_UPDATER_ACTION="I"; fi
-  if [ -d "$REPODIR/fwcloud-ui" ]; then FWC_UI_ACTION="U"; else FWC_UI_ACTION="I"; fi
+  if [ -d "$REPODIR/websrv" ]; then FWC_WEBSRV_ACTION="U"; else FWC_WEBSRV_ACTION="I"; fi
+  if [ -d "$REPODIR/ui" ]; then FWC_UI_ACTION="U"; else FWC_UI_ACTION="I"; fi
+  if [ -d "$REPODIR/api" ]; then FWC_API_ACTION="U"; else FWC_API_ACTION="I"; fi
+  if [ -d "$REPODIR/updater" ]; then FWC_UPDATER_ACTION="U"; else FWC_UPDATER_ACTION="I"; fi
 
   PKGM_CMD="apt install -y"
   NODE_SETUP="setup_14.x"
@@ -229,48 +230,53 @@ EOF
 
 ################################################################
 buildTlsCertificate() {
-  echo "Generating GPG keys pair for ${1} ... "
+  echo "Generating GPG keys pair for fwcloud-${1} ... "
+
+  mkdir "${REPODIR}/${1}/config/tls"
+  chown fwcloud:fwcloud "${REPODIR}/${1}/config/tls"
+  cd "${REPODIR}/${1}/config/tls"
 
   passGen 32
-  CN="${1}-${PASSGEN}"
+  CN="fwcloud-${1}-${PASSGEN}"
   generateOpensslConfig "$CN"
 
   # Private key.
-  openssl genrsa -out ${1}.key 2048
+  openssl genrsa -out fwcloud-${1}.key 2048
 
   # CSR.
-  openssl req -config ./openssl.cnf -new -key ${1}.key -nodes -out ${1}.csr
+  openssl req -config ./openssl.cnf -new -key fwcloud-${1}.key -nodes -out fwcloud-${1}.csr
 
   # Certificate.
   # WARNING: If we indicate more than 825 days for the certificate expiration date
   # we will not be able to access from Google Chrome web browser.
   openssl x509 -extfile ./openssl.cnf -extensions cert_ext -req \
     -days 825 \
-    -signkey ${1}.key -in ${1}.csr -out ${1}.crt
+    -signkey fwcloud-${1}.key -in fwcloud-${1}.csr -out fwcloud-${1}.crt
    
   rm openssl.cnf
-  rm "${1}.csr"
+  rm "fwcloud-${1}.csr"
 
-  chown fwcloud:fwcloud "${1}.key" "${1}.crt"
+  chown fwcloud:fwcloud "fwcloud-${1}.key" "fwcloud-${1}.crt"
   echo "DONE"
+  echo
 }
 ################################################################
 
 ################################################################
 startEnableService() {
-  echo -n "Starting $1 service ... "
-  systemctl start "$1"
+  echo -n "Starting fwcloud-$1 service ... "
+  systemctl start "fwcloud-$1"
   echo "DONE"
 
-  echo -n "Enabling $1 service at boot ... "
-  systemctl enable "$1" >/dev/null 2>&1
+  echo -n "Enabling fwcloud-$1 service at boot ... "
+  systemctl enable "fwcloud-$1" >/dev/null 2>&1
   echo "DONE"
 }
 ################################################################
 
 ################################################################
 tcpPortCheck() {
-  echo -n "TCP port ${1} for ${2} ... "
+  echo -n "TCP port ${1} for fwcloud-${2} ... "
   OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${1}"`
   if [ "$OUT" ]; then
     echo -e "\e[31mIN USE!\e[39m"
@@ -312,19 +318,25 @@ runBuild() {
 
 ################################################################
 enableStart() {
-  cp "${REPODIR}/${1}/config/sys/${1}.service" /etc/systemd/system/
+  cp "${REPODIR}/${1}/config/sys/fwcloud-${1}.service" /etc/systemd/system/
   systemctl daemon-reload
-  echo -n "Enabling $1 at boot ... "
-  systemctl enable $1 >/dev/null 2>&1
+  echo -n "Enabling fwcloud-$1 at boot ... "
+  systemctl enable fwcloud-$1 >/dev/null 2>&1
   echo "DONE"
   echo -n "Starting "
-  systemctl start $1
+  systemctl start fwcloud-$1
+  N=0
   while [ 1 ]; do
     sleep 1
     echo -n "."
     OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
     if [ "$OUT" ]; then
       echo " DONE"
+      break
+    fi
+    N=`expr $N + 1`
+    if [ $N -gt 45 ]; then
+      echo "ERROR"
       break
     fi
   done
@@ -350,9 +362,9 @@ gitCloneOrUpdate() {
       exit 1
     fi
 
-    if [ "$1" = "fwcloud-api" -o "$1" = "fwcloud-updater" ]; then
+    if [ "$1" = "websrv" -o "$1" = "api" -o "$1" = "updater" ]; then
       # Update systemd file.
-      cp "${REPODIR}/${1}/config/sys/${1}.service" /etc/systemd/system/
+      cp "${REPODIR}/${1}/config/sys/fwcloud-${1}.service" /etc/systemd/system/
       systemctl daemon-reload
     fi
 
@@ -363,26 +375,26 @@ gitCloneOrUpdate() {
         exit 1
       fi
     else
-      if [ "$1" = "fwcloud-ui" ]; then
+      if [ "$1" = "ui" ]; then
         return
       fi
 
-      systemctl stop "$1"
+      systemctl stop "fwcloud-$1"
       
       npm install && npm run build
       if [ "$?" != "0" ]; then
         exit 1
       fi
 
-      if [ "$1" = "fwcloud-api" ]; then
+      if [ "$1" = "api" ]; then
         node fwcli migration:run
       fi
 
-      systemctl start "$1"
+      systemctl start "fwcloud-$1"
     fi
   else
     echo "Cloning $1 ..."
-    git clone "https://github.com/soltecsis/${1}.git"
+    git clone -b main --single-branch "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
     if [ "$?" != "0" ]; then
       exit 1
     fi
@@ -429,7 +441,7 @@ echo
 
 echo
 echo "This shell script will install/update FWCloud on your system."
-echo "Projects fwcloud-api, fwcloud-ui and fwcloud-updater will be installed from GitHub."
+echo "Projects fwcloud-websrv, fwcloud-ui, fwcloud-api and fwcloud-updater will be installed."
 promptInput "Do you want to continue? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
@@ -554,13 +566,11 @@ echo
 
 
 # Check if TPC ports used for fwcloud-api and fwcloud-updater are in use.
-if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" -o "$FWC_UI_ACTION" = "I" ]; then
+if [ "$FWC_WEBSRV_ACTION" = "I" -o  "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo -e "\e[32m\e[1m(*) Checking FWCloud TCP ports.\e[21m\e[0m"
-  if [ "$FWC_API_ACTION" = "I" ]; then 
-    tcpPortCheck "$FWC_API_PORT" "fwcloud-api (API)" 
-    tcpPortCheck "$FWC_WEB_PORT" "fwcloud-api (WEB)"
-  fi
-  if [ "$FWC_UPDATER_ACTION" = "I" ]; then tcpPortCheck "$FWC_UPDATER_PORT" "fwcloud-updater"; fi
+  if [ "$FWC_WEBSRV_ACTION" = "I" ]; then tcpPortCheck "$FWC_WEBSRV_PORT" "websrv"; fi
+  if [ "$FWC_API_ACTION" = "I" ]; then tcpPortCheck "$FWC_API_PORT" "api"; fi 
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then tcpPortCheck "$FWC_UPDATER_PORT" "updater"; fi
   echo
 fi
 
@@ -568,10 +578,12 @@ fi
 # Cloning or updating GitHub repositories.
 echo -e "\e[32m\e[1m(*) Cloning/updating GitHub repositories.\e[21m\e[0m"
 echo "We are going to clone/update the next FWCloud repositories:"
-if [ "$FWC_API_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
-echo -e "\e[96mfwcloud-api\e[39m      ${ACT_STR}  (https://github.com/soltecsis/fwcloud-api.git)"
+if [ "$FWC_WEBSRV_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
+echo -e "\e[96mfwcloud-websrv\e[39m   ${ACT_STR}  (https://github.com/soltecsis/fwcloud-websrv.git)"
 if [ "$FWC_UI_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
 echo -e "\e[96mfwcloud-ui\e[39m       ${ACT_STR}  (https://github.com/soltecsis/fwcloud-ui.git)"
+if [ "$FWC_API_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
+echo -e "\e[96mfwcloud-api\e[39m      ${ACT_STR}  (https://github.com/soltecsis/fwcloud-api.git)"
 if [ "$FWC_UPDATER_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
 echo -e "\e[96mfwcloud-updater\e[39m  ${ACT_STR}  (https://github.com/soltecsis/fwcloud-updater.git)"
 echo "These repositories will be cloned/updated into the directory: ${REPODIR}"
@@ -581,6 +593,7 @@ if [ "$OPT" = "n" ]; then
   exit 1
 fi
 
+mkdir "$REPODIR"
 if [ ! -d "$REPODIR" ]; then
   echo -e "\e[31mERROR:\e[39m Directory doesn't exists: ${REPODIR}"
   promptInput "Create it? [Y/n] " "y n" "y"
@@ -594,9 +607,10 @@ if [ ! -d "$REPODIR" ]; then
   fi
 fi
 
-gitCloneOrUpdate "fwcloud-api"
-gitCloneOrUpdate "fwcloud-ui"
-gitCloneOrUpdate "fwcloud-updater"
+gitCloneOrUpdate "websrv"
+gitCloneOrUpdate "ui"
+gitCloneOrUpdate "api"
+gitCloneOrUpdate "updater"
 
 
 echo
@@ -609,42 +623,28 @@ else
 fi
 $PW groupadd fwcloud 2>/dev/null
 $PW useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s `which bash` 2>/dev/null
-chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-api/"
-chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-ui/"
-chown -R fwcloud:fwcloud "${REPODIR}/fwcloud-updater/"
+chown -R fwcloud:fwcloud "${REPODIR}/websrv/"
+chown -R fwcloud:fwcloud "${REPODIR}/ui/"
+chown -R fwcloud:fwcloud "${REPODIR}/api/"
+chown -R fwcloud:fwcloud "${REPODIR}/updater/"
 
 
-if [ "$FWC_API_ACTION" = "I" ]; then
-  echo
-  echo -e "\e[32m\e[1m(*) Branch select for fwcloud-api.\e[21m\e[0m"
-  #promptInput "Select git branch (master/develop) ? [M/d] " "m d" "m"
-  #if [ "$OPT" = "m" ]; then
-  #  BRANCH="master"
-  #else
-  #  BRANCH="develop"
-  #fi
-  echo "At this moment only the develop branch is available."
-  BRANCH="develop"
-  echo "Selecting branch for the fwcloud-api project ... "
-  su - fwcloud -c "cd \"$REPODIR/fwcloud-api\" && git checkout $BRANCH"
-  echo "DONE"
-fi
-
-if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo
   echo -e "\e[32m\e[1m(*) Installing required Node.js modules.\e[21m\e[0m"
-  if [ "$FWC_API_ACTION" = "I" ]; then npmInstall "fwcloud-api"; fi
-  echo
-  if [ "$FWC_UPDATER_ACTION" = "I" ]; then npmInstall "fwcloud-updater"; fi
+  if [ "$FWC_WEBSRV_ACTION" = "I" ]; then npmInstall "websrv"; fi; echo
+  if [ "$FWC_API_ACTION" = "I" ]; then npmInstall "api"; fi; echo
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then npmInstall "updater"; fi
   echo "DONE"
 fi
 
 
-if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo
   echo -e "\e[32m\e[1m(*) TypeScript code compilation.\e[21m\e[0m"
-  if [ "$FWC_API_ACTION" = "I" ]; then runBuild "fwcloud-api"; fi
-  if [ "$FWC_UPDATER_ACTION" = "I" ]; then runBuild "fwcloud-updater"; fi
+  if [ "$FWC_WEBSRV_ACTION" = "I" ]; then runBuild "websrv"; fi
+  if [ "$FWC_API_ACTION" = "I" ]; then runBuild "api"; fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then runBuild "updater"; fi
 fi
 
 
@@ -745,7 +745,7 @@ if [ "$FWC_API_ACTION" = "I" ]; then
 
   # Generate the .env file for fwcloud-api.
   echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
-  ENVFILE="${REPODIR}/fwcloud-api/.env"
+  ENVFILE="${REPODIR}/api/.env"
   cp -pr "${ENVFILE}.example" "${ENVFILE}"
   sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
   passGen 64
@@ -761,24 +761,26 @@ if [ "$FWC_API_ACTION" = "I" ]; then
 
 
   echo -e "\e[32m\e[1m(*) Creating database schema and initial data.\e[21m\e[0m"
-  cd "${REPODIR}/fwcloud-api"
+  cd "${REPODIR}/api"
   echo -n "Database schema ... "
-  su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:run" >/dev/null
+  su - fwcloud -c "cd \"$REPODIR/api\"; node fwcli migration:run" >/dev/null
   if [ "$?" != 0 ]; then
     echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
   echo "DONE"
   echo -n "Initial data ... "
-  su - fwcloud -c "cd \"$REPODIR/fwcloud-api\"; node fwcli migration:data" >/dev/null
+  su - fwcloud -c "cd \"$REPODIR/api\"; node fwcli migration:data" >/dev/null
   if [ "$?" != 0 ]; then
     echo -e "\e[31mInstallation canceled!\e[39m"
     exit 1
   fi
   echo "DONE"
   echo
+fi
 
 
+if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   # TLS setup.
   echo -e "\e[32m\e[1m(*) Secure communications.\e[21m\e[0m"
   echo "Although it is possible to use communication without encryption, both at the user interface"
@@ -788,20 +790,28 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   promptInput "Do you want to use secure communications? [Y/n] " "y n" "y"
   if [ "$OPT" = "y" ]; then
     HTTP_PROTOCOL="https://"
-    mkdir "${REPODIR}/fwcloud-api/config/tls"
-    chown fwcloud:fwcloud "${REPODIR}/fwcloud-api/config/tls"
-    cd "${REPODIR}/fwcloud-api/config/tls"
-    buildTlsCertificate fwcloud-web
-    echo
-    buildTlsCertificate fwcloud-api
+    if [ "$FWC_WEBSRV_ACTION" = "I" ]; then buildTlsCertificate "websrv"; fi
+    if [ "$FWC_API_ACTION" = "I" ]; then buildTlsCertificate "api"; fi
+    if [ "$FWC_UPDATER_ACTION" = "I" ]; then buildTlsCertificate "updater"; fi
   else
     HTTP_PROTOCOL="http://"
     echo >> "${ENVFILE}"
     echo >> "${ENVFILE}"
-    echo "WEBSRV_HTTPS=false" >> "${ENVFILE}"
-    echo "WEBSRV_API_URL=\"http://localhost:${FWC_API_PORT}\"" >> "${ENVFILE}"
-    echo "APISRV_HTTPS=false" >> "${ENVFILE}"
-    echo "SESSION_FORCE_HTTPS=false" >> "${ENVFILE}"
+    if [ "$FWC_WEBSRV_ACTION" = "I" ]; then
+      cd "${REPODIR}/websrv/"
+      echo "HTTPS_ENABLED=false" >> "${ENVFILE}"
+      echo "FWC_API_URL=\"http://localhost:${FWC_API_PORT}\"" >> "${ENVFILE}"
+    fi
+    if [ "$FWC_API_ACTION" = "I" ]; then
+      cd "${REPODIR}/api/"
+      echo "APISRV_HTTPS=false" >> "${ENVFILE}"
+      echo "SESSION_FORCE_HTTPS=false" >> "${ENVFILE}"
+      echo "FWC_UPDATER_URL=\"http://localhost:${FWC_UPDATER_PORT}\"" >> "${ENVFILE}"
+    fi
+    if [ "$FWC_UPDATER_ACTION" = "I" ]; then
+      cd "${REPODIR}/updater/"
+      echo "HTTPS_ENABLED=false" >> "${ENVFILE}"
+    fi
   fi
   echo 
 
@@ -811,6 +821,7 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
   IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
   CORSWL=""
+  cd "${REPODIR}/api/"
   for IP in $IPL; do
     if [ ! -z "$CORSWL" ]; then
       CORSWL="$CORSWL, "
@@ -832,10 +843,11 @@ if [ "$FWC_API_ACTION" = "I" ]; then
 fi
 echo
 
-if [ "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
-  if [ "$FWC_API_ACTION" = "I" ]; then enableStart "fwcloud-api" "$FWC_WEB_PORT"; fi
-  if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStart "fwcloud-updater" "$FWC_UPDATER_PORT"; fi
+  if [ "$FWC_WEBSRV_ACTION" = "I" ]; then enableStart "websrv" "$FWC_WEBSRV_PORT"; fi
+  if [ "$FWC_API_ACTION" = "I" ]; then enableStart "api" "$FWC_API_PORT"; fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStart "updater" "$FWC_UPDATER_PORT"; fi
   echo
 fi
 
