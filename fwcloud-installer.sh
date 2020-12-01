@@ -746,6 +746,7 @@ if [ "$FWC_API_ACTION" = "I" ]; then
 
   # Generate the .env file for fwcloud-api.
   echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
+  cd "${REPODIR}/api"
   cp -pr "${ENVFILE}.example" "${ENVFILE}"
   sed -i "s/NODE_ENV=dev/NODE_ENV=prod/g" "${ENVFILE}"
   passGen 64
