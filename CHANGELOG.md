@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - Location of .env file.
+- Removed database selection and install MariaDB if no database engine installed. 
+- Improve database type detection.
 
 ## [1.0.3] - 2020-12-01
 ### Added

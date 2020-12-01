@@ -519,28 +519,10 @@ else
     DBENGINE="MySQL"
     echo "MySQL ... FOUND"
   else
-    # OpenSUSE only supports MariaDB.
-    if [ "$DIST" = "OpenSUSE" ]; then
-      OPT=1
-    else 
-      echo "Please select the database engine to install:"
-      echo "  (1) MariaDB"
-      echo "  (2) MySQL"
-      promptInput "(1/2)? [1] " "1 2" "1"
-      echo
-    fi
-    if [ "$OPT" = "1" ]; then
-      DBENGINE="MariaDB"
-      pkgInstall "MariaDB" "$MARIADB_PKG"
-      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
-        startEnableService "mariadb"
-      fi
-    else
-      DBENGINE="MySQL"
-      pkgInstall "MySQL" "$MYSQL_PKG"
-      if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
-        startEnableService "mysqld"
-      fi
+    DBENGINE="MariaDB"
+    pkgInstall "MariaDB" "$MARIADB_PKG"
+    if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
+      startEnableService "mariadb"
     fi
   fi
 fi
@@ -554,7 +536,7 @@ echo
 
 # OpenVPN.
 echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
-pkgInstalled "$MARIADB_PKG"
+pkgInstalled "openvpn"
 if [ "$?" = "1" ]; then
   echo "OpenVPN ... FOUND"
 else
@@ -683,9 +665,10 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   # Support for MySQL 8.
   IDENTIFIED_BY="identified by"
   if [ "$DBENGINE" = "MySQL" ]; then
+    IS_MARIADB=`echo "show variables like 'version'" | ${MYSQL_CMD} -N | grep -i mariadb`
     # Get MySQL major version number.
     MYSQL_VERSION_MAJOR_NUMBER=`echo "show variables like 'version'" | ${MYSQL_CMD} -N | awk '{print $2}' | awk -F"." '{print $1}'`
-    if [ $MYSQL_VERSION_MAJOR_NUMBER -ge 8 ]; then
+    if [ -z "$IS_MARIADB" -a $MYSQL_VERSION_MAJOR_NUMBER -ge 8 ]; then
       IDENTIFIED_BY="identified with mysql_native_password by"
     fi 
   fi
