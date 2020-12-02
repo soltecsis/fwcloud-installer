@@ -127,17 +127,25 @@ promptInput() {
 ################################################################
 
 ################################################################
-promptURL() {
+promptProxyURL() {
   # $1=Text message.
   url_regex='^(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]\.[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]$'
 
   while [ 1 ]; do
-    echo "$1:"
-    read -e -p "" -i "" URL
-    if [[ $URL =~ $url_regex ]]; then 
-      break
+    echo -e "- Enter \e[35m${1}\e[39m proxy URL:"
+    read -e -p "" -i "$PROXY_URL" PROXY_URL
+    if [[ $PROXY_URL =~ $url_regex ]]; then 
+      echo -n "Checking proxy ... "
+      RES=`curl -s -o /dev/null -w "%{http_code}" --max-time 20 -x "$PROXY_URL" -L "${1}://google.com"`
+      if [ "$RES" = "200" ]; then
+        echo "OK"
+        break
+      else
+        echo -e "\e[31mERROR\e[39m"
+      fi
     else
-      echo -e "\e[31mERROR:\e[39m: Invalid URL."
+      echo -e "\e[31mERROR\e[39m: Invalid URL."
+      PROXY_URL=""
     fi
   done
 }
@@ -293,9 +301,9 @@ tcpPortCheck() {
 npmInstall() {
   echo -e "\e[96m${1}\e[39m"
   cd "$REPODIR/$1"
-  NPM_INSTALL_CMD="cd \"$REPODIR/$1\" && npm install --loglevel=error"
-  if [ "$HTTP_PROXY_URL" ]; then
-    NPM_INSTALL_CMD="npm config set proxy $HTTP_PROXY_URL && npm config set https-proxy $HTTPS_PROXY_URL && $NPM_INSTALL_CMD"
+  NPM_INSTALL_CMD="cd \"$REPODIR/$1\" && OPENCOLLECTIVE_HIDE=1 npm install --loglevel=error"
+  if [ "$http_proxy" ]; then
+    NPM_INSTALL_CMD="export http_proxy && export https_proxy && npm config set proxy $http_proxy && npm config set https-proxy $https_proxy && $NPM_INSTALL_CMD"
   fi
   su - fwcloud -c "$NPM_INSTALL_CMD"
   if [ "$?" != 0 ]; then
@@ -320,7 +328,14 @@ runBuild() {
 ################################################################
 enableStart() {
   cp "${REPODIR}/${1}/config/sys/fwcloud-${1}.service" /etc/systemd/system/
+
+  if [ "$http_proxy" ]; then
+    SYSTEMD_FILE="/etc/systemd/system/fwcloud-${1}.service"
+    sed -i 's|\[Service\]|\[Service\]\nEnvironment="no_proxy=localhost,127.0.0.*"\nEnvironment="http_proxy='"${http_proxy}"'"\nEnvironment="https_proxy='"${https_proxy}"'"|g' "${SYSTEMD_FILE}"
+  fi
+
   systemctl daemon-reload
+
   echo -n "Enabling fwcloud-$1 at boot ... "
   systemctl enable fwcloud-$1 >/dev/null 2>&1
   echo "DONE"
@@ -460,21 +475,25 @@ fi
 
 
 # Proxy support.
-echo -e "\e[32m\e[1m(*) HTTP proxy.\e[21m\e[0m"
+echo -e "\e[32m\e[1m(*) HTTP/HTTPS proxy.\e[21m\e[0m"
 echo "As part of the install procedure we will download system packages and NodeJS modules."
-echo "If you use an HTTP proxy you have to specify its URL."
-promptInput "Are you behind an HTTP proxy? [y/N] " "y n" "n"
-if [ "$OPT" = "y" ]; then
-  promptURL "Enter the http proxy URL"
-  HTTP_PROXY_URL="$URL"
-  promptURL "Enter the https proxy URL"
-  HTTPS_PROXY_URL="$URL"
-
-  export http_proxy="$HTTP_PROXY_URL"
-  export https_proxy="$HTTPS_PROXY_URL"
+echo "If this system requires a HTTP/HTTPS proxy you have to specify its URL."
+if [ "$http_proxy" -o "$https_proxy" ]; then
+  echo
+  echo "Detected proxy setup:"
+  if [ "$http_proxy" ]; then echo "http_proxy=${http_proxy}"; fi
+  if [ "$https_proxy" ]; then echo "https_proxy=${https_proxy}"; fi
 else
-  HTTP_PROXY_URL=""
-  HTTPS_PROXY_URL=""
+  promptInput "Are you behind an HTTP/HTTPS proxy? [y/N] " "y n" "n"
+  if [ "$OPT" = "y" ]; then
+    echo
+    echo "The proxy information should be given in the standard format: http://[[user][:pass]@]host[:port]"
+    promptProxyURL "http"
+    export http_proxy="$PROXY_URL"
+    
+    promptProxyURL "https"
+    export https_proxy="$PROXY_URL"
+  fi
 fi
 echo 
 
@@ -606,6 +625,12 @@ else
 fi
 $PW groupadd fwcloud 2>/dev/null
 $PW useradd fwcloud -g fwcloud -m -c "SOLTECSIS - FWCloud.net" -s `which bash` 2>/dev/null
+if [ "$http_proxy" ]; then
+  BASHRC_FILE="/home/fwcloud/.bashrc"
+  echo >> "$BASHRC_FILE"
+  echo "export http_proxy=\"$http_proxy\"" >> "$BASHRC_FILE"
+  echo "export https_proxy=\"$https_proxy\"" >> "$BASHRC_FILE"
+fi
 chown -R fwcloud:fwcloud "${REPODIR}/websrv/"
 chown -R fwcloud:fwcloud "${REPODIR}/ui/"
 chown -R fwcloud:fwcloud "${REPODIR}/api/"
