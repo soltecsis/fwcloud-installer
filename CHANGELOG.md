@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Improve proxy setup.
 - Detect proxy config.
+- Upgrade procedure from old directory schema to the new one with all the fwcloud processes under /opt/fwcloud/
 
 ### Fixed
 - Location of .env file.

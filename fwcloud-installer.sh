@@ -30,6 +30,38 @@ printCopyright() {
 ################################################################
 
 ################################################################
+upgradeToNewDirectorySchema() {
+  if [ ! -d "$REPODIR" ]; then mkdir "$REPODIR"; fi
+  
+  echo -n "Upgrading fwcloud-api ... "
+  systemctl stop fwcloud-api
+  mv /opt/fwcloud-api /opt/fwcloud/api
+  cd /opt/fwcloud/api
+  git pull
+  git checkout main
+  sed -i 's|/opt/fwcloud-|/opt/fwcloud/|g' "${ENVFILE}"
+  npm run update
+  # The update scripts starts the service. Wait a little for complet the start of it.
+  sleep 5
+  updateSystemd api
+  # The update process already starts the application.
+  # systemctl start fwcloud-api
+  echo "DONE"
+
+  echo -n "Upgrading fwcloud-ui ... "
+  mv /opt/fwcloud-ui /opt/fwcloud/ui
+  cd /opt/fwcloud/ui
+  git pull
+  git checkout main
+  npm run update
+  echo "DONE"
+
+  FWC_UI_ACTION="U"
+  FWC_API_ACTION="U"
+}
+################################################################
+
+################################################################
 passGen() {
   PASSGEN=`cat /dev/urandom | tr -dc a-zA-Z0-9 | fold -w ${1} | head -n 1`
 }
@@ -272,18 +304,6 @@ buildTlsCertificate() {
 ################################################################
 
 ################################################################
-startEnableService() {
-  echo -n "Starting fwcloud-$1 service ... "
-  systemctl start "fwcloud-$1"
-  echo "DONE"
-
-  echo -n "Enabling fwcloud-$1 service at boot ... "
-  systemctl enable "fwcloud-$1" >/dev/null 2>&1
-  echo "DONE"
-}
-################################################################
-
-################################################################
 tcpPortCheck() {
   echo -n "TCP port ${1} for fwcloud-${2} ... "
   OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${1}"`
@@ -326,15 +346,33 @@ runBuild() {
 ################################################################
 
 ################################################################
-enableStart() {
-  cp "${REPODIR}/${1}/config/sys/fwcloud-${1}.service" /etc/systemd/system/
+updateSystemd() {
+  SYSTEMD_FILE="/etc/systemd/system/fwcloud-${1}.service"
+  cp "${REPODIR}/${1}/config/sys/fwcloud-${1}.service" "${SYSTEMD_FILE}"
 
   if [ "$http_proxy" ]; then
-    SYSTEMD_FILE="/etc/systemd/system/fwcloud-${1}.service"
     sed -i 's|\[Service\]|\[Service\]\nEnvironment="no_proxy=localhost,127.0.0.*"\nEnvironment="http_proxy='"${http_proxy}"'"\nEnvironment="https_proxy='"${https_proxy}"'"|g' "${SYSTEMD_FILE}"
   fi
 
   systemctl daemon-reload
+}
+################################################################
+
+################################################################
+startEnableService() {
+  echo -n "Starting $1 service ... "
+  systemctl start "$1"
+  echo "DONE"
+
+  echo -n "Enabling $1 service at boot ... "
+  systemctl enable "$1" >/dev/null 2>&1
+  echo "DONE"
+}
+################################################################
+
+################################################################
+enableStartFWCloudService() {
+  updateSystemd $1
 
   echo -n "Enabling fwcloud-$1 at boot ... "
   systemctl enable fwcloud-$1 >/dev/null 2>&1
@@ -365,7 +403,7 @@ gitCloneOrUpdate() {
   cd "$REPODIR"
 
   if [ -d "$REPODIR/$1" ]; then
-    echo "Updating $1 ..."
+    echo "Updating fwcloud-$1 ..."
     cd "$1"
     NEEDS_UP_TO_DATE=`git pull --dry-run 2<&1`
     if [ ! "$NEEDS_UP_TO_DATE" ]; then
@@ -380,8 +418,7 @@ gitCloneOrUpdate() {
 
     if [ "$1" = "websrv" -o "$1" = "api" -o "$1" = "updater" ]; then
       # Update systemd file.
-      cp "${REPODIR}/${1}/config/sys/fwcloud-${1}.service" /etc/systemd/system/
-      systemctl daemon-reload
+      updateSystemd $1
     fi
 
     EXISTS_UPDATE_SCRIPT=`grep "\"update\":" package.json`
@@ -390,6 +427,9 @@ gitCloneOrUpdate() {
       if [ "$?" != "0" ]; then
         exit 1
       fi
+      # The update scripts starts the service. Wait a little for complet the start of it.
+      sleep 5
+      updateSystemd $1
     else
       if [ "$1" = "ui" ]; then
         return
@@ -409,7 +449,7 @@ gitCloneOrUpdate() {
       systemctl start "fwcloud-$1"
     fi
   else
-    echo "Cloning $1 ..."
+    echo "Installing fwcloud-$1 ..."
     git clone -b main --single-branch "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
     if [ "$?" != "0" ]; then
       exit 1
@@ -498,12 +538,44 @@ fi
 echo 
 
 
+# Detect old directory structure installation.
+if [ -d "/opt/fwcloud-api" -a -d "/opt/fwcloud-ui" ]; then
+  echo -e "\e[32m\e[1m(*) Old directory schema detected.\e[21m\e[0m"
+  echo "Old schema:"
+  echo "  /opt/fwcloud-api"
+  echo "  /opt/fwcloud-ui"
+  echo
+  echo "New schema:"
+  echo "  /opt/fwcloud/websrv"
+  echo "  /opt/fwcloud/ui"
+  echo "  /opt/fwcloud/api"
+  echo "  /opt/fwcloud/updater"
+  echo
+  promptInput "Do you want upgrade to the new schema ? [Y/n] " "y n" "y"
+  if [ "$OPT" = "n" ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+  echo
+  echo -e "\e[35mWARNING\e[39m: Please, make sure that you have a backup of your FWCloud installation."
+  echo "If you are using virtual machines you can make an snapshot before the upgrade."
+  promptInput "Continue ? [Y/n] " "y n" "y"
+  if [ "$OPT" = "n" ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
+  upgradeToNewDirectorySchema
+  echo
+fi
+
+
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
 pkgInstall "lsof" "lsof"
 pkgInstall "git" "git"
 pkgInstall "curl" "curl"
 pkgInstall "OpenSSL" "openssl"
+pkgInstall "OpenVPN" "openvpn"
 pkgInstall "osslsigncode" "osslsigncode"
 if [ "$DIST" != "OpenSUSE" -a "$DIST" != "FreeBSD" ]; then
   echo -n "Setting up Node.js repository ... "
@@ -540,29 +612,13 @@ else
   else
     DBENGINE="MariaDB"
     pkgInstall "MariaDB" "$MARIADB_PKG"
-    if [ "$DIST" = "RedHat" -o $DIST = "CentOS" -o $DIST = "Fedora" -o $DIST = "OpenSUSE" ]; then
-      startEnableService "mariadb"
-    fi
+    startEnableService "mariadb"
   fi
 fi
 
 if [ "$DIST" = "FeeBSD" ]; then
   sysrc mysql_enable=YES
   service mysql-server start
-fi
-echo
-
-
-# OpenVPN.
-echo -e "\e[32m\e[1m(*) OpenVPN package.\e[21m\e[0m"
-pkgInstalled "openvpn"
-if [ "$?" = "1" ]; then
-  echo "OpenVPN ... FOUND"
-else
-  promptInput "Do you want to install the OpenVPN package ? [Y/n] " "y n" "y"
-  if [ "$OPT" = "y" ]; then
-    pkgInstall "OpenVPN" "openvpn"
-  fi
 fi
 echo
 
@@ -578,8 +634,8 @@ fi
 
 
 # Cloning or updating GitHub repositories.
-echo -e "\e[32m\e[1m(*) Cloning/updating GitHub repositories.\e[21m\e[0m"
-echo "We are going to clone/update the next FWCloud repositories:"
+echo -e "\e[32m\e[1m(*) Installing/updating from GitHub repositories.\e[21m\e[0m"
+echo "We are going to install/update the next FWCloud projects:"
 if [ "$FWC_WEBSRV_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
 echo -e "\e[96mfwcloud-websrv\e[39m   ${ACT_STR}  (https://github.com/soltecsis/fwcloud-websrv.git)"
 if [ "$FWC_UI_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
@@ -588,25 +644,17 @@ if [ "$FWC_API_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_S
 echo -e "\e[96mfwcloud-api\e[39m      ${ACT_STR}  (https://github.com/soltecsis/fwcloud-api.git)"
 if [ "$FWC_UPDATER_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
 echo -e "\e[96mfwcloud-updater\e[39m  ${ACT_STR}  (https://github.com/soltecsis/fwcloud-updater.git)"
-echo "These repositories will be cloned/updated into the directory: ${REPODIR}"
+echo "These repositories will be installed/updated into the directory: ${REPODIR}"
 promptInput "Is it right? [Y/n] " "y n" "y"
 if [ "$OPT" = "n" ]; then
   echo -e "\e[31mInstallation canceled!\e[39m"
   exit 1
 fi
 
-mkdir "$REPODIR"
+if [ ! -d "$REPODIR" ]; then mkdir "$REPODIR"; fi
 if [ ! -d "$REPODIR" ]; then
-  echo -e "\e[31mERROR:\e[39m Directory doesn't exists: ${REPODIR}"
-  promptInput "Create it? [Y/n] " "y n" "y"
-  if [ "$OPT" = "y" ]; then
-    mkdir "$REPODIR"
-    if [ "$?" != 0 ]; then
-      exit 1
-    fi
-  else
-    exit 1
-  fi
+  echo -e "\e[31mERROR:\e[39m Creating directory: $REPODIR"
+  exit 1
 fi
 
 gitCloneOrUpdate "websrv"
@@ -854,9 +902,9 @@ echo
 
 if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
-  if [ "$FWC_WEBSRV_ACTION" = "I" ]; then enableStart "websrv" "$FWC_WEBSRV_PORT"; fi
-  if [ "$FWC_API_ACTION" = "I" ]; then enableStart "api" "$FWC_API_PORT"; fi
-  if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStart "updater" "$FWC_UPDATER_PORT"; fi
+  if [ "$FWC_WEBSRV_ACTION" = "I" ]; then enableStartFWCloudService "websrv" "$FWC_WEBSRV_PORT"; fi
+  if [ "$FWC_API_ACTION" = "I" ]; then enableStartFWCloudService "api" "$FWC_API_PORT"; fi
+  if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStartFWCloudService "updater" "$FWC_UPDATER_PORT"; fi
   echo
 fi
 
