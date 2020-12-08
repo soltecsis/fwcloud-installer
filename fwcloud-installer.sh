@@ -796,10 +796,10 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   runSql "create user '${DBUSER}'@'${DBHOST}' ${IDENTIFIED_BY} '${DBPASS}'"
   runSql "grant all privileges on ${DBNAME}.* to '${DBUSER}'@'${DBHOST}'"
   runSql "flush privileges"
-  echo
 
 
   # Generate the .env file for fwcloud-api.
+  echo
   echo -e "\e[32m\e[1m(*) Generating .env file for fwcloud-api.\e[21m\e[0m"
   cd "${REPODIR}/api"
   cp -pr "${ENVFILE}.example" "${ENVFILE}"
@@ -813,9 +813,9 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   sed -i "s/TYPEORM_USERNAME=/TYPEORM_USERNAME=\"${DBUSER}\"/g" "${ENVFILE}"
   sed -i "s/TYPEORM_PASSWORD=/TYPEORM_PASSWORD=\"${DBPASS}\"/g" "${ENVFILE}"
   echo "DONE"
+
+
   echo
-
-
   echo -e "\e[32m\e[1m(*) Creating database schema and initial data.\e[21m\e[0m"
   cd "${REPODIR}/api"
   echo -n "Database schema ... "
@@ -832,12 +832,12 @@ if [ "$FWC_API_ACTION" = "I" ]; then
     exit 1
   fi
   echo "DONE"
-  echo
 fi
 
 
 if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
   # TLS setup.
+  echo
   echo -e "\e[32m\e[1m(*) Secure communications.\e[21m\e[0m"
   echo "Although it is possible to use communication without encryption, both at the user interface"
   echo "and the API level, it is something that should only be done in a development environment."
@@ -869,10 +869,11 @@ if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTI
       echo "HTTPS_ENABLED=false" >> "${ENVFILE}"
     fi
   fi
-  echo 
+fi
 
-
+if [ "$FWC_API_ACTION" = "I"
   # CORS.
+  echo 
   echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) whitelist setup.\e[21m\e[0m"
   echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
   IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
@@ -897,16 +898,16 @@ if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTI
   done
   sed -i "s|CORS_WHITELIST=\"http://localhost\"|CORS_WHITELIST=\"${CORSWL}\"|g" "${ENVFILE}"
 fi
-echo
 
 if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTION" = "I" ]; then
+  echo
   echo -e "\e[32m\e[1m(*) Enabling and starting services.\e[21m\e[0m"
   if [ "$FWC_WEBSRV_ACTION" = "I" ]; then enableStartFWCloudService "websrv" "$FWC_WEBSRV_PORT"; fi
   if [ "$FWC_API_ACTION" = "I" ]; then enableStartFWCloudService "api" "$FWC_API_PORT"; fi
   if [ "$FWC_UPDATER_ACTION" = "I" ]; then enableStartFWCloudService "updater" "$FWC_UPDATER_PORT"; fi
-  echo
 fi
 
+echo
 echo -e "\e[32m\e[1m--- PROCESS COMPLETED ----\e[21m\e[0m"
 echo "Your FWCloud system is ready!"
 echo
