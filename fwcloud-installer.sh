@@ -871,7 +871,7 @@ if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTI
   fi
 fi
 
-if [ "$FWC_API_ACTION" = "I"
+if [ "$FWC_API_ACTION" = "I" ]; then
   # CORS.
   echo 
   echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) whitelist setup.\e[21m\e[0m"
