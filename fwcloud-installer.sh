@@ -44,8 +44,7 @@ upgradeToNewDirectorySchema() {
   # The update scripts starts the service. Wait a little for complet the start of it.
   sleep 5
   updateSystemd api
-  # The update process already starts the application.
-  # systemctl start fwcloud-api
+  systemctl start fwcloud-api
   echo "DONE"
 
   echo -n "Upgrading fwcloud-ui ... "
