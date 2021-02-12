@@ -427,6 +427,7 @@ gitCloneOrUpdate() {
         exit 1
       fi
       updateSystemd $1
+      systemctl start "fwcloud-$1"
     else
       if [ "$1" = "ui" ]; then
         return
@@ -442,10 +443,9 @@ gitCloneOrUpdate() {
       if [ "$1" = "api" ]; then
         node fwcli migration:run
       fi
+      
+      systemctl start "fwcloud-$1"
     fi
-
-    # Start service.
-    systemctl start "fwcloud-$1"
   else
     echo "Installing fwcloud-$1 ..."
     git clone -b main --single-branch "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
