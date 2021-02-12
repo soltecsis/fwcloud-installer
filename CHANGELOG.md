@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [1.0.4] - 2021-01-27
-### Added
+### Added
 - Recursively clone git submodules.
 - Improve proxy setup.
 - Detect proxy config.
@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [1.0.3] - 2020-12-01
-### Added
+### Added
 - Install fwcloud-websrv.
 - New directory structure:
     /opt/fwcloud/websrv
@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     /opt/fwcloud/updater
 
 ## [1.0.2] - 2020-11-24
-### Added
+### Added
 - Steps required for install fwcloud-updater.
 - Update if fwcloud is already installed.
 - Install fwcloud-updater if it is not still present.
