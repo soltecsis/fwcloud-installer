@@ -427,7 +427,10 @@ gitCloneOrUpdate() {
         exit 1
       fi
       updateSystemd $1
-      systemctl start "fwcloud-$1"
+
+      if [ "$1" != "ui" ]; then
+        systemctl start "fwcloud-$1"
+      fi
     else
       if [ "$1" = "ui" ]; then
         return
@@ -443,7 +446,7 @@ gitCloneOrUpdate() {
       if [ "$1" = "api" ]; then
         node fwcli migration:run
       fi
-      
+
       systemctl start "fwcloud-$1"
     fi
   else
