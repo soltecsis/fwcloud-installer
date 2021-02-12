@@ -426,8 +426,6 @@ gitCloneOrUpdate() {
       if [ "$?" != "0" ]; then
         exit 1
       fi
-      # The update scripts starts the service. Wait a little for complet the start of it.
-      sleep 5
       updateSystemd $1
     else
       if [ "$1" = "ui" ]; then
@@ -444,14 +442,20 @@ gitCloneOrUpdate() {
       if [ "$1" = "api" ]; then
         node fwcli migration:run
       fi
-
-      systemctl start "fwcloud-$1"
     fi
+
+    # Start service.
+    systemctl start "fwcloud-$1"
   else
     echo "Installing fwcloud-$1 ..."
-    git clone -b main --single-branch --recurse-submodules "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
+    git clone -b main --single-branch "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
     if [ "$?" != "0" ]; then
       exit 1
+    fi
+
+    # Init fwcloud-ui submodules.
+    if [ "$1" = "ui" ]; then    
+      git submodule update --init --recursive
     fi
   fi
 }
