@@ -426,9 +426,9 @@ gitCloneOrUpdate() {
       if [ "$?" != "0" ]; then
         exit 1
       fi
-      updateSystemd $1
 
       if [ "$1" != "ui" ]; then
+        updateSystemd $1
         systemctl start "fwcloud-$1"
       fi
     else
