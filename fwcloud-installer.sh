@@ -457,8 +457,10 @@ gitCloneOrUpdate() {
     fi
 
     # Init fwcloud-ui submodules.
-    if [ "$1" = "ui" ]; then    
+    if [ "$1" = "ui" ]; then
+      cd ui  
       git submodule update --init --recursive
+      cd ..
     fi
   fi
 }
