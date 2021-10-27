@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed database selection and install MariaDB if no database engine installed. 
 - Improve database type detection.
 
+## [1.0.4] - 2021-10-27
+### Fixed
+- Disable audit log in npm install.
 
 ## [1.0.3] - 2020-12-01
 ### Added

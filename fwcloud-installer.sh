@@ -320,7 +320,7 @@ tcpPortCheck() {
 npmInstall() {
   echo -e "\e[96m${1}\e[39m"
   cd "$REPODIR/$1"
-  NPM_INSTALL_CMD="cd \"$REPODIR/$1\" && OPENCOLLECTIVE_HIDE=1 npm install --loglevel=error"
+  NPM_INSTALL_CMD="cd \"$REPODIR/$1\" && OPENCOLLECTIVE_HIDE=1 npm install --loglevel=error --no-audit"
   if [ "$http_proxy" ]; then
     NPM_INSTALL_CMD="export http_proxy && export https_proxy && npm config set proxy $http_proxy && npm config set https-proxy $https_proxy && $NPM_INSTALL_CMD"
   fi
