@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restart fwcloud service after update it.
 - Init fwcloud-ui submodules.
 - Clone only the last commit of the main branch of each FWCloud GitHub repository.
+- Docker installation support by means of the --docker option.
 
 
 ## [1.0.4] - 2021-01-27

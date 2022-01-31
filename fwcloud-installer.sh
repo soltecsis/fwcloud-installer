@@ -67,6 +67,32 @@ passGen() {
 ################################################################
 
 ################################################################
+discoverLinuxDist() {
+  which hostnamectl >/dev/null 2>&1
+  if [ "$?" = "0" ]; then
+    OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
+  else
+    OS=`uname -a`
+    if [ `echo $OS | awk '{print $1}'` = "Linux" ]; then
+      if [ -f /etc/issue ]; then
+        OS=`cat /etc/issue | head -n 1 | awk '{print $1" "$2" "$3}'`
+      fi
+    fi
+  fi
+  case $OS in
+    'Ubuntu '*) DIST="Ubuntu";;
+    'Debian '*) DIST="Debian";;
+    'Red Hat Enterprise '*) DIST="RedHat";;
+    'CentOS '*) DIST="CentOS";;
+    'Fedora '*) DIST="Fedora";;
+    'openSUSE '*) DIST="OpenSUSE";;
+    'FreeBSD '*) DIST="FreeBSD";;
+    *) DIST="";;
+  esac
+}
+################################################################
+
+################################################################
 setGlobalVars() {
   FWC_API_PORT="3131"
   FWC_UPDATER_PORT="3132"
@@ -79,7 +105,7 @@ setGlobalVars() {
   if [ -d "$REPODIR/updater" ]; then FWC_UPDATER_ACTION="U"; else FWC_UPDATER_ACTION="I"; fi
 
   PKGM_CMD="apt install -y"
-  NODE_SETUP="setup_14.x"
+  NODE_SETUP="setup_16.x"
   NODE_SRC="https://deb.nodesource.com/${NODE_SETUP}"
   MYSQL_PKG="mysql-server"
   MARIADB_PKG="mariadb-server"
@@ -378,21 +404,26 @@ enableStartFWCloudService() {
   echo "DONE"
   echo -n "Starting "
   systemctl start fwcloud-$1
-  N=0
-  while [ 1 ]; do
+  if [ ! $DOCKER_INSTALL ]; then
+    N=0
+    while [ 1 ]; do
+      sleep 1
+      echo -n "."
+      OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
+      if [ "$OUT" ]; then
+        echo " DONE"
+        break
+      fi
+      N=`expr $N + 1`
+      if [ $N -gt 45 ]; then
+        echo "ERROR"
+        break
+      fi
+    done
+  else
     sleep 1
-    echo -n "."
-    OUT=`lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep "\:${2}"`
-    if [ "$OUT" ]; then
-      echo " DONE"
-      break
-    fi
-    N=`expr $N + 1`
-    if [ $N -gt 45 ]; then
-      echo "ERROR"
-      break
-    fi
-  done
+    echo ". DONE"
+  fi
 }
 ################################################################
 
@@ -471,23 +502,14 @@ clear
 printCopyright
 
 
-echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
-which hostnamectl >/dev/null 2>&1
-if [ "$?" = "0" ]; then
-  OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
-else
-  OS=`uname -a`
+# Check if docker installation option is present.
+if [ "$1" = "--docker" ]; then
+  DOCKER_INSTALL=1
 fi
-case $OS in
-  'Ubuntu '*) DIST="Ubuntu";;
-  'Debian '*) DIST="Debian";;
-  'Red Hat Enterprise '*) DIST="RedHat";;
-  'CentOS '*) DIST="CentOS";;
-  'Fedora '*) DIST="Fedora";;
-  'openSUSE '*) DIST="OpenSUSE";;
-  'FreeBSD '*) DIST="FreeBSD";;
-  *) DIST="";;
-esac
+
+
+echo -e "\e[32m\e[1m(*) Linux distribution.\e[21m\e[0m"
+discoverLinuxDist
 setGlobalVars
 
 if [ $DIST ]; then
@@ -506,10 +528,12 @@ echo
 echo
 echo "This shell script will install/update FWCloud on your system."
 echo "Projects fwcloud-websrv, fwcloud-ui, fwcloud-api and fwcloud-updater will be installed."
-promptInput "Do you want to continue? [Y/n] " "y n" "y"
-if [ "$OPT" = "n" ]; then
-  echo -e "\e[31mInstallation canceled!\e[39m"
-  exit 1
+if [ ! $DOCKER_INSTALL ]; then
+  promptInput "Do you want to continue? [Y/n] " "y n" "y"
+  if [ "$OPT" = "n" ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
 fi
 echo
 
@@ -522,28 +546,37 @@ if [ "$EUID" != "0" ]; then
 fi
 
 
-# Proxy support.
-echo -e "\e[32m\e[1m(*) HTTP/HTTPS proxy.\e[21m\e[0m"
-echo "As part of the install procedure we will download system packages and NodeJS modules."
-echo "If this system requires a HTTP/HTTPS proxy you have to specify its URL."
-if [ "$http_proxy" -o "$https_proxy" ]; then
+if [ $DOCKER_INSTALL ]; then
+  echo -e "\e[32m\e[1m(*) Updating packages lists.\e[21m\e[0m"
+  apt update
   echo
-  echo "Detected proxy setup:"
-  if [ "$http_proxy" ]; then echo "http_proxy=${http_proxy}"; fi
-  if [ "$https_proxy" ]; then echo "https_proxy=${https_proxy}"; fi
-else
-  promptInput "Are you behind an HTTP/HTTPS proxy? [y/N] " "y n" "n"
-  if [ "$OPT" = "y" ]; then
-    echo
-    echo "The proxy information should be given in the standard format: http://[[user][:pass]@]host[:port]"
-    promptProxyURL "http"
-    export http_proxy="$PROXY_URL"
-    
-    promptProxyURL "https"
-    export https_proxy="$PROXY_URL"
-  fi
 fi
-echo 
+
+
+# Proxy support.
+if [ ! $DOCKER_INSTALL ]; then
+  echo -e "\e[32m\e[1m(*) HTTP/HTTPS proxy.\e[21m\e[0m"
+  echo "As part of the install procedure we will download system packages and NodeJS modules."
+  echo "If this system requires a HTTP/HTTPS proxy you have to specify its URL."
+  if [ "$http_proxy" -o "$https_proxy" ]; then
+    echo
+    echo "Detected proxy setup:"
+    if [ "$http_proxy" ]; then echo "http_proxy=${http_proxy}"; fi
+    if [ "$https_proxy" ]; then echo "https_proxy=${https_proxy}"; fi
+  else
+    promptInput "Are you behind an HTTP/HTTPS proxy? [y/N] " "y n" "n"
+    if [ "$OPT" = "y" ]; then
+      echo
+      echo "The proxy information should be given in the standard format: http://[[user][:pass]@]host[:port]"
+      promptProxyURL "http"
+      export http_proxy="$PROXY_URL"
+      
+      promptProxyURL "https"
+      export https_proxy="$PROXY_URL"
+    fi
+  fi
+  echo 
+fi
 
 
 # Detect old directory structure installation.
@@ -579,6 +612,10 @@ fi
 
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
+if [ $DOCKER_INSTALL ]; then
+  pkgInstall "systemctl" "systemctl"
+  export RUNLEVEL=1
+fi
 pkgInstall "lsof" "lsof"
 pkgInstall "git" "git"
 pkgInstall "curl" "curl"
@@ -628,6 +665,10 @@ if [ "$DIST" = "FeeBSD" ]; then
   sysrc mysql_enable=YES
   service mysql-server start
 fi
+
+if [ $DOCKER_INSTALL ]; then
+  systemctl start mysql
+fi
 echo
 
 
@@ -653,10 +694,12 @@ echo -e "\e[96mfwcloud-api\e[39m      ${ACT_STR}  (https://github.com/soltecsis/
 if [ "$FWC_UPDATER_ACTION" = "I" ]; then ACT_STR="[\e[35mINSTALL\e[39m]"; else ACT_STR="[\e[35mUPDATE\e[39m] "; fi
 echo -e "\e[96mfwcloud-updater\e[39m  ${ACT_STR}  (https://github.com/soltecsis/fwcloud-updater.git)"
 echo "These repositories will be installed/updated into the directory: ${REPODIR}"
-promptInput "Is it right? [Y/n] " "y n" "y"
-if [ "$OPT" = "n" ]; then
-  echo -e "\e[31mInstallation canceled!\e[39m"
-  exit 1
+if [ ! $DOCKER_INSTALL ]; then
+  promptInput "Is it right? [Y/n] " "y n" "y"
+  if [ "$OPT" = "n" ]; then
+    echo -e "\e[31mInstallation canceled!\e[39m"
+    exit 1
+  fi
 fi
 
 if [ ! -d "$REPODIR" ]; then mkdir "$REPODIR"; fi
@@ -765,27 +808,29 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   echo -e "  \e[1mDatabase:\e[0m $DBNAME"
   echo -e "      \e[1mUser:\e[0m $DBUSER"
   echo -e "  \e[1mPassword:\e[0m $DBPASS"
-  promptInput "Is it right? [Y/n] " "y n" "y"
-  if [ "$OPT" = "n" ]; then
-    while [ 1 ]; do
-      echo
-      echo "Enter new database data:"
-      read -p "      Host: " DBHOST
-      read -p "  Database: " DBNAME
-      read -p "      User: " DBUSER
-      read -p "  Password: " DBPASS
+  if [ ! $DOCKER_INSTALL ]; then
+    promptInput "Is it right? [Y/n] " "y n" "y"
+    if [ "$OPT" = "n" ]; then
+      while [ 1 ]; do
+        echo
+        echo "Enter new database data:"
+        read -p "      Host: " DBHOST
+        read -p "  Database: " DBNAME
+        read -p "      User: " DBUSER
+        read -p "  Password: " DBPASS
 
-      echo
-      echo "These are the new database access data:"
-      echo -e "      \e[1mHost:\e[0m $DBHOST"
-      echo -e "  \e[1mDatabase:\e[0m $DBNAME"
-      echo -e "      \e[1mUser:\e[0m $DBUSER"
-      echo -e "  \e[1mPassword:\e[0m $DBPASS"
-      promptInput "Is it right? [Y/n] " "y n" "y"
-      if [ "$OPT" = "y" ]; then
-        break
-      fi
-    done
+        echo
+        echo "These are the new database access data:"
+        echo -e "      \e[1mHost:\e[0m $DBHOST"
+        echo -e "  \e[1mDatabase:\e[0m $DBNAME"
+        echo -e "      \e[1mUser:\e[0m $DBUSER"
+        echo -e "  \e[1mPassword:\e[0m $DBPASS"
+        promptInput "Is it right? [Y/n] " "y n" "y"
+        if [ "$OPT" = "y" ]; then
+          break
+        fi
+      done
+    fi
   fi
 
   # Now check if the fwcloud database already exists.
@@ -852,7 +897,11 @@ if [ "$FWC_WEBSRV_ACTION" = "I" -o "$FWC_API_ACTION" = "I" -o "$FWC_UPDATER_ACTI
   echo "and the API level, it is something that should only be done in a development environment."
   echo "In a production environment it is highly advisable to use encrypted communications" 
   echo "both at the level of access to the user interface and in accessing the API."
-  promptInput "Do you want to use secure communications? [Y/n] " "y n" "y"
+  if [ ! $DOCKER_INSTALL ]; then
+    promptInput "Do you want to use secure communications? [Y/n] " "y n" "y"
+  else
+    OPT="y"
+  fi
   if [ "$OPT" = "y" ]; then
     HTTP_PROTOCOL="https://"
     if [ "$FWC_WEBSRV_ACTION" = "I" ]; then buildTlsCertificate "websrv"; fi
@@ -885,26 +934,30 @@ if [ "$FWC_API_ACTION" = "I" ]; then
   echo 
   echo -e "\e[32m\e[1m(*) CORS (Cross-Origin Resource Sharing) whitelist setup.\e[21m\e[0m"
   echo "It is important that you include in this list the URL that you will use for access fwcloud-ui."
-  IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
-  CORSWL=""
   cd "${REPODIR}/api/"
-  for IP in $IPL; do
-    if [ ! -z "$CORSWL" ]; then
-      CORSWL="$CORSWL, "
-    fi
-    CORSWL="${CORSWL}${HTTP_PROTOCOL}${IP}:3030"
-  done
-  while [ 1 ]; do
-    echo -e "CORS white list: \e[1m${CORSWL}\e[0m"
+  if [ ! $DOCKER_INSTALL ]; then
+    IPL=`ip a |grep "    inet " | awk -F"    inet " '{print $2}' | awk -F"/" '{print $1}' | grep -v "^127.0.0.1$"`
+    CORSWL=""
+    for IP in $IPL; do
+      if [ ! -z "$CORSWL" ]; then
+        CORSWL="$CORSWL, "
+      fi
+      CORSWL="${CORSWL}${HTTP_PROTOCOL}${IP}:3030"
+    done
+    while [ 1 ]; do
+      echo -e "CORS white list: \e[1m${CORSWL}\e[0m"
 
-    promptInput "Is it right? [Y/n] " "y n" "y"
-    if [ "$OPT" = "y" ]; then
-      break
-    fi
+      promptInput "Is it right? [Y/n] " "y n" "y"
+      if [ "$OPT" = "y" ]; then
+        break
+      fi
 
-    echo "Enter the new CORS white list (coma separated items):"
-    read -e -p "" -i "$CORSWL" CORSWL
-  done
+      echo "Enter the new CORS white list (coma separated items):"
+      read -e -p "" -i "$CORSWL" CORSWL
+    done
+  else
+    CORSWL="https://localhost:3030"
+  fi
   sed -i "s|CORS_WHITELIST=\"http://localhost\"|CORS_WHITELIST=\"${CORSWL}\"|g" "${ENVFILE}"
 fi
 
