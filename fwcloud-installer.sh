@@ -612,16 +612,16 @@ fi
 
 # Install required packages.
 echo -e "\e[32m\e[1m(*) Searching for required packages.\e[21m\e[0m"
-if [ $DOCKER_INSTALL ]; then
-  pkgInstall "systemctl" "systemctl"
-  export RUNLEVEL=1
-fi
 pkgInstall "lsof" "lsof"
 pkgInstall "git" "git"
 pkgInstall "curl" "curl"
 pkgInstall "OpenSSL" "openssl"
 pkgInstall "OpenVPN" "openvpn"
 pkgInstall "osslsigncode" "osslsigncode"
+if [ $DOCKER_INSTALL ]; then
+  pkgInstall "systemctl" "systemctl"
+fi
+
 if [ "$DIST" != "OpenSUSE" -a "$DIST" != "FreeBSD" ]; then
   echo -n "Setting up Node.js repository ... "
   OUT=`curl -sL ${NODE_SRC} | bash -  2>&1 >/dev/null`
