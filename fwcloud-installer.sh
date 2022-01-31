@@ -451,7 +451,7 @@ gitCloneOrUpdate() {
     fi
   else
     echo "Installing fwcloud-$1 ..."
-    git clone -b main --single-branch "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
+    git clone -b main --single-branch --depth 1 "https://github.com/soltecsis/fwcloud-${1}.git" "$1"
     if [ "$?" != "0" ]; then
       exit 1
     fi
