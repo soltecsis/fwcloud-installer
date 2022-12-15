@@ -70,7 +70,7 @@ passGen() {
 discoverLinuxDist() {
   which hostnamectl >/dev/null 2>&1
   if [ "$?" = "0" ]; then
-    OS=`hostnamectl | grep "^  Operating System: " | awk -F": " '{print $2}'`
+    OS=`hostnamectl | grep "^ *Operating System: " | awk -F": " '{print $2}'`
   else
     OS=`uname -a`
     if [ `echo $OS | awk '{print $1}'` = "Linux" ]; then
