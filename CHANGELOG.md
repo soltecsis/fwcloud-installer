@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.6] - 2022-12-15
 ### Fixed
-- Regular expression bug in Linux distribution detection method.
+- Regular expression bug in Linux distribution detection method. Reported by Jeremy Mueller.
 
 
 ## [1.0.5] - 2022-01-31
